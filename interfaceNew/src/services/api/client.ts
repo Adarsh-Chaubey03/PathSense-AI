@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
 
 const DEFAULT_PORT = "4000";
+const REQUEST_TIMEOUT_MS = 15000;
 
 function resolveBaseUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -27,13 +28,33 @@ export async function apiRequest<TResponse>(
   options: RequestInit = {},
 ): Promise<TResponse> {
   const baseUrl = resolveBaseUrl();
-  const response = await fetch(`${baseUrl}${path}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers ?? {}),
-    },
-    ...options,
-  });
+  const timeoutController = new AbortController();
+  const timeoutHandle = setTimeout(() => {
+    timeoutController.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  const signal = options.signal ?? timeoutController.signal;
+
+  let response: Response;
+
+  try {
+    response = await fetch(`${baseUrl}${path}`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(options.headers ?? {}),
+      },
+      signal,
+      ...options,
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new ApiError(`Request timeout after ${REQUEST_TIMEOUT_MS}ms`, 408);
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeoutHandle);
+  }
 
   if (!response.ok) {
     let message = `API request failed (${response.status})`;

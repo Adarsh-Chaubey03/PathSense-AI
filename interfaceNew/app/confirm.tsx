@@ -10,6 +10,7 @@ import { StatusBadge } from "@/src/components/common/StatusBadge";
 import { playConfirmationPromptHaptic } from "@/src/services/feedback/haptics";
 import { speakConfirmationPrompt } from "@/src/services/feedback/voice";
 import { postFallEvent } from "@/src/services/api/fall-events";
+import { evaluateCandidate } from "@/src/features/fall-event/detection";
 import { services } from "@/src/services";
 import {
   getFallEvent,
@@ -21,8 +22,11 @@ import { useFallEvent } from "@/src/state/use-fall-event";
 export default function ConfirmScreen() {
   const router = useRouter();
   const event = useFallEvent();
-  const [secondsLeft, setSecondsLeft] = useState(30);
+  const [secondsLeft, setSecondsLeft] = useState(15);
   const [isEscalating, setIsEscalating] = useState(false);
+  const [backendStatus, setBackendStatus] = useState(
+    "Awaiting confirmation timeout or user action.",
+  );
 
   useEffect(() => {
     const { state } = getFallEvent();
@@ -69,11 +73,44 @@ export default function ConfirmScreen() {
     setIsEscalating(true);
     const sample = services.sensorAdapter.getLatestSample();
 
+    if (!sample) {
+      setBackendStatus(
+        "Sensor sample unavailable. Waiting for live IMU data before escalation.",
+      );
+      setIsEscalating(false);
+      return;
+    }
+
+    const decision = evaluateCandidate(sample);
+
+    if (!decision.shouldEscalateCandidate) {
+      setBackendStatus(decision.reason);
+      transitionFallEvent("FALSE_ALARM", "Filtered by anti-false-positive guard");
+      router.push("./result");
+      setIsEscalating(false);
+      return;
+    }
+
+    setBackendStatus("Submitting fall-event payload to backend...");
+
     try {
+      const snapshot = services.sensorAdapter.getRecentSamples(6000, 180);
       const result = await postFallEvent({
-        motionScore: sample?.motionScore ?? 0.1,
-        orientationChange: sample?.orientationChange ?? true,
+        eventId: `${sample.timestampMs}-${Math.random().toString(36).slice(2, 8)}`,
+        timestampMs: sample.timestampMs,
+        motionState: sample.motionState,
+        accelerometer: sample.accelerometer,
+        gyroscope: sample.gyroscope,
+        accelMagnitude: sample.accelMagnitude,
+        gyroMagnitude: sample.gyroMagnitude,
+        sampleRateHz: sample.sampleRateHz,
+        source: sample.source,
+        snapshot,
+        motionScore: sample.motionScore,
+        orientationChange: sample.orientationChange,
       });
+
+      setBackendStatus(`Backend decision: ${result.status}`);
 
       if (result.status === "REJECTED") {
         transitionFallEvent("FALSE_ALARM", "Backend rejected fall candidate");
@@ -83,6 +120,9 @@ export default function ConfirmScreen() {
       }
     } catch {
       // Keep local escalation flow alive even when API is unavailable.
+      setBackendStatus(
+        "Backend unavailable. Continuing with local emergency escalation.",
+      );
     }
 
     if (getFallEvent().state === "CONFIRMING") {
@@ -109,7 +149,7 @@ export default function ConfirmScreen() {
   return (
     <ThemedView style={styles.container}>
       <ThemedText type="title">Are you okay?</ThemedText>
-      <ConfirmationStatusCard message="Confirmation stage active." />
+      <ConfirmationStatusCard message={backendStatus} />
       <CountdownTimer secondsLeft={secondsLeft} />
       <StatusBadge state={event.state} />
       <TouchableOpacity onPress={handleImOk} style={styles.link}>
@@ -120,7 +160,9 @@ export default function ConfirmScreen() {
         style={styles.link}
         disabled={isEscalating}
       >
-        <ThemedText type="link">No response / escalate</ThemedText>
+        <ThemedText type="link">
+          {isEscalating ? "Escalating..." : "No response / escalate"}
+        </ThemedText>
       </TouchableOpacity>
     </ThemedView>
   );

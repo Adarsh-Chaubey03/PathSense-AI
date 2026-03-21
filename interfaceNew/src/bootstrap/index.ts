@@ -4,6 +4,7 @@ import {
   STORAGE_KEYS,
   STORAGE_SCHEMA_VERSION,
 } from "@/src/services/storage/storage-keys";
+import { requestAppPermissions } from "@/src/services/permissions/permissions";
 import { hydrateFallEvent } from "@/src/state/fall-event-store";
 
 export async function bootstrapApp(): Promise<void> {
@@ -14,6 +15,13 @@ export async function bootstrapApp(): Promise<void> {
   }
 
   await hydrateFallEvent();
+
+  try {
+    const permissions = await requestAppPermissions();
+    console.log("[Permissions]", permissions);
+  } catch {
+    // Permission flow should never block demo startup.
+  }
 
   try {
     await getHealth();

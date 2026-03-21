@@ -6,7 +6,7 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { DispatchStatusCard } from "@/src/components/alert/DispatchStatusCard";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
-import { sendContactAlert } from "@/src/services/api/fall-events";
+import { sendEmergencyAlert } from "@/src/services/api/contacts";
 import { playEmergencyHaptic } from "@/src/services/feedback/haptics";
 import { speakEmergencyPrompt } from "@/src/services/feedback/voice";
 import { services } from "@/src/services";
@@ -21,6 +21,7 @@ export default function AlertScreen() {
   const router = useRouter();
   const event = useFallEvent();
   const [isDispatching, setIsDispatching] = useState(false);
+  const [hasDispatched, setHasDispatched] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState(
     "Preparing SOS payload and notifying contacts.",
   );
@@ -49,18 +50,46 @@ export default function AlertScreen() {
   }, []);
 
   const handleDispatched = async (): Promise<void> => {
+    if (hasDispatched) {
+      router.push("./result");
+      return;
+    }
+
     if (isDispatching) {
       return;
     }
 
     setIsDispatching(true);
+    setDispatchMessage("Sending alert to emergency contacts...");
 
     try {
-      const location = await services.locationAdapter.getCurrentLocation();
-      await sendContactAlert(
-        `Possible fall detected at ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}.`,
+      const location = await Promise.race([
+        services.locationAdapter.getCurrentLocation(),
+        new Promise<null>((resolve) => {
+          setTimeout(() => resolve(null), 8000);
+        }),
+      ]);
+
+      const locationText = location
+        ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
+        : "location unavailable";
+
+      const alertResponse = await sendEmergencyAlert(
+        `Possible fall detected at ${locationText}.`,
       );
-      setDispatchMessage("SOS payload dispatched to emergency contacts.");
+
+      if (alertResponse.success) {
+        const sentCount = alertResponse.recipients.filter(
+          (recipient) => recipient.status === "sent",
+        ).length;
+        setDispatchMessage(
+          location
+            ? `SOS sent to ${sentCount}/${alertResponse.recipients.length} contacts with location.`
+            : `SOS sent to ${sentCount}/${alertResponse.recipients.length} contacts without location (timeout fallback).`,
+        );
+      } else {
+        setDispatchMessage(alertResponse.message);
+      }
     } catch {
       setDispatchMessage(
         "Unable to reach backend. Local emergency flow continues.",
@@ -71,7 +100,7 @@ export default function AlertScreen() {
       transitionFallEvent("RESOLVED", "SOS dispatch marked complete");
     }
 
-    router.push("./result");
+    setHasDispatched(true);
     setIsDispatching(false);
   };
 
@@ -85,7 +114,13 @@ export default function AlertScreen() {
         style={styles.link}
         disabled={isDispatching}
       >
-        <ThemedText type="link">Mark as dispatched</ThemedText>
+        <ThemedText type="link">
+          {isDispatching
+            ? "Dispatching..."
+            : hasDispatched
+              ? "Continue to result"
+              : "Mark as dispatched"}
+        </ThemedText>
       </TouchableOpacity>
     </ThemedView>
   );

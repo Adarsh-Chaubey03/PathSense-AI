@@ -65,7 +65,7 @@ export default function MonitoringScreen() {
       <ThemedText style={styles.body}>
         Sensor sample:{" "}
         {sample
-          ? `${sample.motionScore.toFixed(2)} / ${sample.orientationChange ? "tilt" : "stable"}`
+          ? `motion ${sample.motionScore.toFixed(2)} | accel ${sample.accelMagnitude.toFixed(2)} m/s² | gyro ${sample.gyroMagnitude.toFixed(2)} rad/s | ${sample.motionState}`
           : "waiting..."}
       </ThemedText>
       <TouchableOpacity onPress={handleSimulateCandidate} style={styles.link}>
