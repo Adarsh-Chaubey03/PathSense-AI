@@ -2,6 +2,7 @@ import express from "express";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
+import { send_alert_to_contacts } from "../services/contactManager.ts";
 
 const router = express.Router();
 
@@ -60,28 +61,47 @@ router.delete("/:phone", (req, res) => {
   res.json({ message: "Contact removed" });
 });
 
-// POST /api/contacts/alert - Send alert to all contacts (simulated)
-router.post("/alert", (req, res) => {
+// POST /api/contacts/alert - Send alert to all contacts
+router.post("/alert", async (req, res) => {
   const { message } = req.body;
 
   if (!message) {
     return res.status(400).json({ message: "Message is required" });
   }
 
-  const contacts = getContacts();
-  const alerts = contacts.map((contact) => {
-    console.log(`Sending alert to ${contact.name} (${contact.phone}): ${message}`);
-    return {
+  try {
+    const results = await send_alert_to_contacts(message);
+
+    if (results.length === 0) {
+      return res.status(409).json({
+        message: "No emergency contacts configured",
+        success: false,
+        recipients: [],
+      });
+    }
+
+    const recipients = results.map(({ contact, smsResult }) => ({
       name: contact.name,
       phone: contact.phone,
-      status: "sent"
-    };
-  });
+      status: smsResult.success ? "sent" : "failed",
+      error: smsResult.error,
+    }));
 
-  res.json({
-    message: "Alerts sent",
-    recipients: alerts
-  });
+    const success = recipients.some((recipient) => recipient.status === "sent");
+
+    res.json({
+      message: success ? "Alerts sent" : "Alert dispatch failed",
+      success,
+      recipients,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({
+      message: "Failed to send alerts",
+      success: false,
+      error: message,
+    });
+  }
 });
 
 export default router;

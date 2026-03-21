@@ -1,5 +1,12 @@
-import type { FallStatus, FallEventRequest, FallEventResponse, ValidationResult } from '../types/fall.ts';
+import type {
+  FallDispatchSummary,
+  FallStatus,
+  FallEventRequest,
+  FallEventResponse,
+  ValidationResult,
+} from '../types/fall.ts';
 import { send_alert_to_contacts } from './contactManager.ts';
+import { appendFallEvent } from './fallEventStore.ts';
 
 const CONFIRMATION_TIMEOUT_MS = 5000;
 
@@ -61,9 +68,19 @@ async function waitForUserConfirmation(transcript?: string): Promise<string | un
   });
 }
 
-async function triggerSOS(): Promise<void> {
+async function triggerSOS(): Promise<FallDispatchSummary> {
   const message = 'EMERGENCY ALERT: Possible fall detected. Immediate assistance required.';
-  await send_alert_to_contacts(message);
+  const alertResults = await send_alert_to_contacts(message);
+
+  const recipientsTotal = alertResults.length;
+  const recipientsSucceeded = alertResults.filter((result) => result.smsResult.success).length;
+
+  return {
+    attempted: recipientsTotal > 0,
+    success: recipientsSucceeded > 0,
+    recipientsTotal,
+    recipientsSucceeded,
+  };
 }
 
 /**
@@ -75,6 +92,12 @@ export async function handleFallEvent(request: FallEventRequest): Promise<FallEv
   const validationResult = validateFall(motionScore, orientationChange);
   let finalStatus: FallStatus = validationResult.status;
   let sosTriggered = false;
+  let dispatch: FallDispatchSummary = {
+    attempted: false,
+    success: false,
+    recipientsTotal: 0,
+    recipientsSucceeded: 0,
+  };
 
   console.log('[FallEvent] Validation result:', validationResult.status);
 
@@ -92,12 +115,21 @@ export async function handleFallEvent(request: FallEventRequest): Promise<FallEv
   }
 
   if (finalStatus === 'CONFIRMED') {
-    await triggerSOS();
-    sosTriggered = true;
-    console.log('[FallEvent] SOS triggered');
+    dispatch = await triggerSOS();
+    sosTriggered = dispatch.success;
+    console.log(`[FallEvent] SOS ${sosTriggered ? 'triggered' : 'failed'}`);
   }
 
-  return { status: finalStatus, sosTriggered };
+  appendFallEvent({
+    eventId: request.eventId,
+    createdAt: new Date().toISOString(),
+    status: finalStatus,
+    sosTriggered,
+    dispatch,
+    request,
+  });
+
+  return { status: finalStatus, sosTriggered, dispatch };
 }
 
 export default { validateFall, handleFallEvent };
