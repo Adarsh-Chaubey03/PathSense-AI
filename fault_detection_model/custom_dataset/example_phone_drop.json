@@ -1,0 +1,102 @@
+[
+  {
+    "timestamp": 0.000,
+    "acc_x": 0.02,
+    "acc_y": 0.01,
+    "acc_z": 0.98,
+    "gyro_x": 0.01,
+    "gyro_y": -0.02,
+    "gyro_z": 0.00,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.005,
+    "acc_x": 0.05,
+    "acc_y": 0.03,
+    "acc_z": 0.95,
+    "gyro_x": 0.15,
+    "gyro_y": 0.08,
+    "gyro_z": 0.02,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.010,
+    "acc_x": 0.12,
+    "acc_y": 0.08,
+    "acc_z": 0.85,
+    "gyro_x": 0.45,
+    "gyro_y": 0.25,
+    "gyro_z": 0.10,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.015,
+    "acc_x": 0.25,
+    "acc_y": 0.18,
+    "acc_z": 0.65,
+    "gyro_x": 1.20,
+    "gyro_y": 0.85,
+    "gyro_z": 0.35,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.020,
+    "acc_x": 0.45,
+    "acc_y": 0.30,
+    "acc_z": 0.35,
+    "gyro_x": 2.50,
+    "gyro_y": 1.80,
+    "gyro_z": 0.95,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.025,
+    "acc_x": 0.08,
+    "acc_y": -0.15,
+    "acc_z": -0.02,
+    "gyro_x": 3.80,
+    "gyro_y": 2.90,
+    "gyro_z": 1.65,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.030,
+    "acc_x": -0.85,
+    "acc_y": 1.20,
+    "acc_z": 1.95,
+    "gyro_x": 1.50,
+    "gyro_y": -2.10,
+    "gyro_z": 3.20,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.035,
+    "acc_x": 0.15,
+    "acc_y": 0.05,
+    "acc_z": 0.92,
+    "gyro_x": 0.35,
+    "gyro_y": 0.15,
+    "gyro_z": 0.08,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.040,
+    "acc_x": 0.03,
+    "acc_y": 0.01,
+    "acc_z": 0.99,
+    "gyro_x": 0.05,
+    "gyro_y": 0.02,
+    "gyro_z": 0.01,
+    "label": "phone_drop"
+  },
+  {
+    "timestamp": 0.045,
+    "acc_x": 0.01,
+    "acc_y": 0.00,
+    "acc_z": 1.00,
+    "gyro_x": 0.01,
+    "gyro_y": 0.00,
+    "gyro_z": 0.00,
+    "label": "phone_drop"
+  }
+]

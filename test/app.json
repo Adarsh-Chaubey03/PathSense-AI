@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "IMU Dataset Collector",
+    "slug": "test",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.coderonin.test",
+      "infoPlist": {
+        "NSMotionUsageDescription": "This app collects motion data to improve fall detection accuracy"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.coderonin.test",
+      "permissions": ["android.permission.HIGH_SAMPLING_RATE_SENSORS"]
+    },
+    "plugins": ["expo-sensors"]
+  }
+}

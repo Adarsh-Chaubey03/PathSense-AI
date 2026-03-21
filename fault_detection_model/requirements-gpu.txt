@@ -1,0 +1,11 @@
+numpy>=1.26,<3
+pandas>=2.2,<3
+scipy>=1.13,<2
+scikit-learn>=1.5,<2
+matplotlib>=3.9,<4
+seaborn>=0.13,<1
+tqdm>=4.67,<5
+PyYAML>=6.0,<7
+onnx>=1.18,<2
+onnxruntime-gpu>=1.22,<2
+tensorboard>=2.19,<3
