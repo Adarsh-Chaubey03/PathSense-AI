@@ -25,7 +25,8 @@
     "react-native-screens": "^3.31.1",
     "react-native-sensors": "^7.3.6",
     "react-native-tts": "^4.1.0",
-    "react-native-vision-camera": "^4.0.5"
+    "react-native-vision-camera": "^4.0.5",
+    "@react-native-voice/voice": "^3.2.4"
   },
   "devDependencies": {
     "@babel/core": "^7.24.5",
