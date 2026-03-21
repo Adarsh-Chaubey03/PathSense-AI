@@ -5,35 +5,34 @@ import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
 import { getFallEvent, transitionFallEvent } from "@/src/state/fall-event-store";
 
-export default function HomeScreen() {
+export default function ResultScreen() {
   const router = useRouter();
 
-  const handleStartMonitoring = (): void => {
-    if (getFallEvent().state === "IDLE") {
-      transitionFallEvent("MONITORING", "Monitoring started from home");
+  const handleBackToMonitoring = (): void => {
+    const { state } = getFallEvent();
+
+    if (state === "RESOLVED") {
+      transitionFallEvent("IDLE", "Resolved event closed");
+    }
+
+    if (getFallEvent().state === "FALSE_ALARM") {
+      transitionFallEvent("MONITORING", "Resume monitoring after false alarm");
+    } else if (getFallEvent().state === "IDLE") {
+      transitionFallEvent("MONITORING", "Resume monitoring after resolution");
     }
 
     router.push("./monitoring");
   };
 
-  const handleOpenSettings = (): void => {
-    router.push("./settings");
-  };
-
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">PathSense Flow</ThemedText>
+      <ThemedText type="title">Event Result</ThemedText>
       <ThemedText style={styles.body}>
-        Start monitoring and walk through the fall-response flow.
+        Event completed. Ready to return to monitoring.
       </ThemedText>
-
       <ThemedText style={styles.body}>State: {getFallEvent().state}</ThemedText>
-      <TouchableOpacity onPress={handleStartMonitoring} style={styles.link}>
-        <ThemedText type="link">Start monitoring</ThemedText>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={handleOpenSettings} style={styles.link}>
-        <ThemedText type="link">Open settings</ThemedText>
+      <TouchableOpacity onPress={handleBackToMonitoring} style={styles.link}>
+        <ThemedText type="link">Back to monitoring</ThemedText>
       </TouchableOpacity>
     </ThemedView>
   );
