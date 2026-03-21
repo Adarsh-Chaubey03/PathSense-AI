@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import morgan from "morgan";
 import contactsRouter from "./routes/contacts.js";
+import fallRoutes from "./routes/fallRoutes.ts";
 
 const app = express();
 
@@ -28,6 +29,9 @@ app.get("/api/health", (_req, res) => {
 
 // Contact management routes
 app.use("/api/contacts", contactsRouter);
+
+// Fall detection routes
+app.use("/api", fallRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
