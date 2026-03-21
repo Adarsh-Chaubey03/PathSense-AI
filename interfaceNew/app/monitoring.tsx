@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "expo-router";
 import { StyleSheet, TouchableOpacity } from "react-native";
 
@@ -18,40 +18,40 @@ import {
   resetEdgeFilter,
   type DetectionDecision,
 } from "@/src/features/fall-event/detection";
-import { postFallDetectWithRetry } from "@/src/services/api/fall-events";
-import type { RawSensorDataPoint } from "@/src/services/sensors/sensor-window-store";
-
-function buildInferenceWindow(samples: RawSensorDataPoint[]): number[][] | null {
-  if (!Array.isArray(samples) || samples.length === 0) {
-    return null;
-  }
-
-  const selected = samples.length >= 100 ? samples.slice(-100) : [...samples];
-
-  if (selected.length < 100) {
-    const first = selected[0];
-    const missing = 100 - selected.length;
-    for (let i = 0; i < missing; i += 1) {
-      selected.unshift(first);
-    }
-  }
-
-  return selected.map((sample) => [
-    sample.acc_x,
-    sample.acc_y,
-    sample.acc_z,
-    sample.gyro_x,
-    sample.gyro_y,
-    sample.gyro_z,
-  ]);
-}
 
 export default function MonitoringScreen() {
   const router = useRouter();
   const event = useFallEvent();
   const [sample, setSample] = useState<SensorSample | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<DetectionDecision | null>(null);
-  const mlRequestInFlight = useRef(false);
+
+  const routeToConfirmation = useCallback((reason: string) => {
+    const { state } = getFallEvent();
+
+    if (
+      state !== "IDLE" &&
+      state !== "MONITORING" &&
+      state !== "CANDIDATE" &&
+      state !== "CONFIRMING"
+    ) {
+      resetFallEvent();
+      transitionFallEvent("MONITORING", "Reset stale flow before ML-confirmed fall");
+    }
+
+    if (state === "IDLE") {
+      transitionFallEvent("MONITORING", "Edge filter activated monitoring");
+    }
+
+    if (getFallEvent().state === "MONITORING") {
+      transitionFallEvent("CANDIDATE", "Edge AI detected potential fall pattern");
+    }
+
+    if (getFallEvent().state === "CANDIDATE") {
+      transitionFallEvent("CONFIRMING", reason);
+    }
+
+    router.push("./confirm");
+  }, [router]);
 
   const handleSensorSample = useCallback(
     (newSample: SensorSample) => {
@@ -61,56 +61,12 @@ export default function MonitoringScreen() {
       const decision = evaluateWithEdgeFilter(newSample);
       setEdgeStatus(decision);
 
-      // If edge filter decides to call API, transition to confirmation flow
-      if (decision.shouldEscalateCandidate && !mlRequestInFlight.current) {
-        const window = buildInferenceWindow(decision.sensorData ?? []);
-        if (!window) {
-          return;
-        }
-
-        mlRequestInFlight.current = true;
-
-        void postFallDetectWithRetry(window)
-          .then((mlResult) => {
-            if (!mlResult || mlResult.result !== "REAL_FALL") {
-              return;
-            }
-
-            const { state } = getFallEvent();
-
-            if (
-              state !== "IDLE" &&
-              state !== "MONITORING" &&
-              state !== "CANDIDATE" &&
-              state !== "CONFIRMING"
-            ) {
-              resetFallEvent();
-              transitionFallEvent(
-                "MONITORING",
-                "Reset stale flow before ML-confirmed fall",
-              );
-            }
-
-            if (state === "IDLE") {
-              transitionFallEvent("MONITORING", "Edge filter activated monitoring");
-            }
-
-            if (getFallEvent().state === "MONITORING") {
-              transitionFallEvent("CANDIDATE", "Edge AI detected potential fall pattern");
-            }
-
-            if (getFallEvent().state === "CANDIDATE") {
-              transitionFallEvent("CONFIRMING", "Backend ML confirmed real fall");
-            }
-
-            router.push("./confirm");
-          })
-          .finally(() => {
-            mlRequestInFlight.current = false;
-          });
+      // Edge-filter responsibility: route to confirmation UI on spikes.
+      if (decision.shouldEscalateCandidate) {
+        routeToConfirmation("Edge filter detected a potential fall");
       }
     },
-    [router],
+    [routeToConfirmation],
   );
 
   useEffect(() => {

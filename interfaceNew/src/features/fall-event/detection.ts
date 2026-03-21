@@ -3,7 +3,6 @@ import {
   edgeFallFilter,
   type EdgeFilterResult,
   type WindowStats,
-  type RawSensorDataPoint,
 } from "./edge-filter";
 
 export interface DetectionDecision {
@@ -11,7 +10,6 @@ export interface DetectionDecision {
   reason: string;
   edgeDecision?: "CALL_API" | "IGNORE";
   windowStats?: WindowStats;
-  sensorData?: RawSensorDataPoint[];
 }
 
 const FALL_MOTION_THRESHOLD = 0.22;
@@ -89,7 +87,6 @@ export function evaluateWithEdgeFilter(sample: SensorSample): DetectionDecision 
     reason: edgeResult.reason,
     edgeDecision: edgeResult.decision,
     windowStats: edgeResult.windowStats,
-    sensorData: edgeResult.sensorData,
   };
 }
 

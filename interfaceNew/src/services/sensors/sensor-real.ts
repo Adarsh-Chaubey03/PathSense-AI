@@ -12,7 +12,7 @@ import type {
   SensorVector,
 } from "@/src/services/sensors/sensor-adapter";
 
-const DEFAULT_SAMPLE_RATE_HZ = 20;
+const DEFAULT_SAMPLE_RATE_HZ = 50;
 const GRAVITY_EARTH = 9.81;
 
 export class RealSensorAdapter implements SensorAdapter {

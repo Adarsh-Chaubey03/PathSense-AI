@@ -1,8 +1,4 @@
 import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
-import {
-  sensorWindowStore,
-  type RawSensorDataPoint,
-} from "@/src/services/sensors/sensor-window-store";
 
 /**
  * Edge AI Fall Detection Filter
@@ -17,7 +13,6 @@ export interface EdgeFilterResult {
   decision: EdgeDecision;
   reason: string;
   windowStats?: WindowStats;
-  sensorData?: RawSensorDataPoint[];
 }
 
 export interface WindowStats {
@@ -28,14 +23,18 @@ export interface WindowStats {
 }
 
 // Configuration constants
-const WINDOW_SIZE = 20;
-const COOLDOWN_MS = 3000;
+const WINDOW_SIZE = 30;
 const GRAVITY_EARTH = 9.81;
 
-// Fall detection thresholds (in g for acceleration, rad/s for gyroscope)
-const FREE_FALL_THRESHOLD = 0.5;
-const IMPACT_THRESHOLD = 2.5;
-const ROTATION_THRESHOLD = 2.5;
+// Fall-range constraints for spike-triggered confirmation.
+const IMPACT_ACCEL_THRESHOLD = 2.7;
+const FREEFALL_ACCEL_THRESHOLD = 0.7;
+const ROTATION_THRESHOLD = 2.6;
+const DYNAMIC_RANGE_THRESHOLD = 1.8;
+const HIGH_IMPACT_OVERRIDE_THRESHOLD = 3.0;
+const MIN_FALL_SEQUENCE_MS = 120;
+const MAX_FALL_SEQUENCE_MS = 1200;
+const IMPACT_CONTEXT_RADIUS_SAMPLES = 6;
 
 interface SlidingWindowSample {
   accMagG: number;
@@ -45,7 +44,6 @@ interface SlidingWindowSample {
 
 class EdgeFallFilter {
   private window: SlidingWindowSample[] = [];
-  private lastApiCallTimestamp: number = 0;
 
   private toGUnits(accelMagnitudeMps2: number): number {
     return accelMagnitudeMps2 / GRAVITY_EARTH;
@@ -57,16 +55,6 @@ class EdgeFallFilter {
   evaluate(sample: SensorSample): EdgeFilterResult {
     const accMagG = this.toGUnits(sample.accelMagnitude);
     const gyroMag = sample.gyroMagnitude;
-
-    // Store raw sensor data in the 2-second window
-    sensorWindowStore.addSample(
-      sample.accelerometer.x,
-      sample.accelerometer.y,
-      sample.accelerometer.z,
-      sample.gyroscope.x,
-      sample.gyroscope.y,
-      sample.gyroscope.z,
-    );
 
     // Add sample to sliding window for fall detection
     this.window.push({
@@ -88,51 +76,78 @@ class EdgeFallFilter {
       };
     }
 
-    // Check cooldown
-    const now = Date.now();
-    if (now - this.lastApiCallTimestamp < COOLDOWN_MS) {
-      const remainingMs = COOLDOWN_MS - (now - this.lastApiCallTimestamp);
-      return {
-        decision: "IGNORE",
-        reason: `Cooldown active (${Math.ceil(remainingMs / 1000)}s remaining)`,
-      };
-    }
-
-    // Compute window statistics
+    // Compute window statistics for UI/debugging
     const stats = this.computeWindowStats();
 
-    // Apply fall detection conditions
-    const hasFreefall = stats.minAccG < FREE_FALL_THRESHOLD;
-    const hasImpact = stats.maxAccG > IMPACT_THRESHOLD;
-    const hasRotation = stats.maxGyro > ROTATION_THRESHOLD;
+    let minIdx = 0;
+    let maxIdx = 0;
+    for (let i = 1; i < this.window.length; i += 1) {
+      if (this.window[i].accMagG < this.window[minIdx].accMagG) {
+        minIdx = i;
+      }
+      if (this.window[i].accMagG > this.window[maxIdx].accMagG) {
+        maxIdx = i;
+      }
+    }
 
-    // All three conditions must be met
-    if (hasFreefall && hasImpact && hasRotation) {
-      this.lastApiCallTimestamp = now;
+    const sequenceDeltaMs =
+      this.window[maxIdx].timestampMs - this.window[minIdx].timestampMs;
+    const hasValidSequence =
+      minIdx < maxIdx &&
+      sequenceDeltaMs >= MIN_FALL_SEQUENCE_MS &&
+      sequenceDeltaMs <= MAX_FALL_SEQUENCE_MS;
 
-      // Get the raw sensor data for API call
-      const sensorData = sensorWindowStore.getSamplesForApi();
+    const hasImpact = stats.maxAccG > IMPACT_ACCEL_THRESHOLD;
+    const hasFreefall = stats.minAccG < FREEFALL_ACCEL_THRESHOLD;
+    const hasDynamicSwing = stats.maxAccG - stats.minAccG > DYNAMIC_RANGE_THRESHOLD;
 
+    const contextStart = Math.max(0, maxIdx - IMPACT_CONTEXT_RADIUS_SAMPLES);
+    const contextEnd = Math.min(this.window.length - 1, maxIdx + IMPACT_CONTEXT_RADIUS_SAMPLES);
+    let hasRotationNearImpact = false;
+    for (let i = contextStart; i <= contextEnd; i += 1) {
+      if (this.window[i].gyroMag > ROTATION_THRESHOLD) {
+        hasRotationNearImpact = true;
+        break;
+      }
+    }
+    const hasHighImpactOverride = stats.maxAccG > HIGH_IMPACT_OVERRIDE_THRESHOLD;
+
+    // Trigger only for fall-like sequences (freefall -> impact in valid time window)
+    // plus either strong rotational context or very high impact.
+    if (
+      hasImpact &&
+      hasFreefall &&
+      hasDynamicSwing &&
+      hasValidSequence &&
+      (hasRotationNearImpact || hasHighImpactOverride)
+    ) {
       this.clearWindow();
 
       return {
         decision: "CALL_API",
-        reason: `Fall detected: freefall(${stats.minAccG.toFixed(2)}g) + impact(${stats.maxAccG.toFixed(2)}g) + rotation(${stats.maxGyro.toFixed(2)} rad/s)`,
+        reason: `Fall sequence: min(${stats.minAccG.toFixed(2)}g)->impact(${stats.maxAccG.toFixed(2)}g) in ${Math.round(sequenceDeltaMs)}ms, gyro(${stats.maxGyro.toFixed(2)} rad/s)`,
         windowStats: stats,
-        sensorData,
       };
     }
 
     // Build reason for IGNORE
     const missing: string[] = [];
-    if (!hasFreefall) {
-      missing.push(`no freefall (min=${stats.minAccG.toFixed(2)}g)`);
-    }
     if (!hasImpact) {
       missing.push(`no impact (max=${stats.maxAccG.toFixed(2)}g)`);
     }
-    if (!hasRotation) {
-      missing.push(`no rotation (max=${stats.maxGyro.toFixed(2)} rad/s)`);
+    if (!hasDynamicSwing) {
+      missing.push(`no swing (range=${(stats.maxAccG - stats.minAccG).toFixed(2)}g)`);
+    }
+    if (!hasFreefall) {
+      missing.push(`no freefall (min=${stats.minAccG.toFixed(2)}g)`);
+    }
+    if (!hasValidSequence) {
+      missing.push(`no fall sequence (delta=${Math.round(sequenceDeltaMs)}ms)`);
+    }
+    if (!hasRotationNearImpact && !hasHighImpactOverride) {
+      missing.push(
+        `no impact context (gyro=${stats.maxGyro.toFixed(2)} rad/s, impact=${stats.maxAccG.toFixed(2)}g)`,
+      );
     }
 
     return {
@@ -167,8 +182,6 @@ class EdgeFallFilter {
 
   reset(): void {
     this.window = [];
-    this.lastApiCallTimestamp = 0;
-    sensorWindowStore.clear();
   }
 
   getWindowStats(): WindowStats | null {
@@ -177,18 +190,14 @@ class EdgeFallFilter {
   }
 
   isInCooldown(): boolean {
-    return Date.now() - this.lastApiCallTimestamp < COOLDOWN_MS;
+    return false;
   }
 
   getCooldownRemainingMs(): number {
-    const elapsed = Date.now() - this.lastApiCallTimestamp;
-    return Math.max(0, COOLDOWN_MS - elapsed);
+    return 0;
   }
 }
 
 // Singleton instance
 export const edgeFallFilter = new EdgeFallFilter();
 
-// Re-export types
-export type { RawSensorDataPoint, SensorWindowData } from "@/src/services/sensors/sensor-window-store";
-export { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
