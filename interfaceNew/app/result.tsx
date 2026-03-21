@@ -3,10 +3,17 @@ import { StyleSheet, TouchableOpacity } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { getFallEvent, transitionFallEvent } from "@/src/state/fall-event-store";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import {
+  getFallEventTransitions,
+  getFallEvent,
+  transitionFallEvent,
+} from "@/src/state/fall-event-store";
+import { useFallEvent } from "@/src/state/use-fall-event";
 
 export default function ResultScreen() {
   const router = useRouter();
+  const event = useFallEvent();
 
   const handleBackToMonitoring = (): void => {
     const { state } = getFallEvent();
@@ -30,7 +37,10 @@ export default function ResultScreen() {
       <ThemedText style={styles.body}>
         Event completed. Ready to return to monitoring.
       </ThemedText>
-      <ThemedText style={styles.body}>State: {getFallEvent().state}</ThemedText>
+      <StatusBadge state={event.state} />
+      <ThemedText style={styles.body}>
+        Logged transitions: {getFallEventTransitions().length}
+      </ThemedText>
       <TouchableOpacity onPress={handleBackToMonitoring} style={styles.link}>
         <ThemedText type="link">Back to monitoring</ThemedText>
       </TouchableOpacity>

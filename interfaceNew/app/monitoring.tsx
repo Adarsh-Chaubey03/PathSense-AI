@@ -1,18 +1,44 @@
+import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
 import { StyleSheet, TouchableOpacity } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
+import { services } from "@/src/services";
 import {
   getFallEvent,
+  resetFallEvent,
   transitionFallEvent,
 } from "@/src/state/fall-event-store";
+import { useFallEvent } from "@/src/state/use-fall-event";
 
 export default function MonitoringScreen() {
   const router = useRouter();
+  const event = useFallEvent();
+  const [sample, setSample] = useState<SensorSample | null>(null);
+
+  useEffect(() => {
+    services.sensorAdapter.start(setSample);
+
+    return () => {
+      services.sensorAdapter.stop();
+    };
+  }, []);
 
   const handleSimulateCandidate = (): void => {
     const { state } = getFallEvent();
+
+    if (
+      state !== "IDLE" &&
+      state !== "MONITORING" &&
+      state !== "CANDIDATE" &&
+      state !== "CONFIRMING"
+    ) {
+      resetFallEvent();
+      transitionFallEvent("MONITORING", "Reset stale flow before simulation");
+    }
 
     if (state === "IDLE") {
       transitionFallEvent("MONITORING", "Monitoring screen activated");
@@ -35,7 +61,13 @@ export default function MonitoringScreen() {
       <ThemedText style={styles.body}>
         Continuous monitoring is active.
       </ThemedText>
-      <ThemedText style={styles.body}>State: {getFallEvent().state}</ThemedText>
+      <StatusBadge state={event.state} />
+      <ThemedText style={styles.body}>
+        Sensor sample:{" "}
+        {sample
+          ? `${sample.motionScore.toFixed(2)} / ${sample.orientationChange ? "tilt" : "stable"}`
+          : "waiting..."}
+      </ThemedText>
       <TouchableOpacity onPress={handleSimulateCandidate} style={styles.link}>
         <ThemedText type="link">Simulate fall candidate</ThemedText>
       </TouchableOpacity>

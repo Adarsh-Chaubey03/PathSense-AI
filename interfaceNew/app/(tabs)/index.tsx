@@ -3,7 +3,11 @@ import { StyleSheet, TouchableOpacity } from "react-native";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
-import { getFallEvent, transitionFallEvent } from "@/src/state/fall-event-store";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import {
+  getFallEvent,
+  transitionFallEvent,
+} from "@/src/state/fall-event-store";
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -13,11 +17,11 @@ export default function HomeScreen() {
       transitionFallEvent("MONITORING", "Monitoring started from home");
     }
 
-    router.push("./monitoring");
+    router.push("/monitoring");
   };
 
   const handleOpenSettings = (): void => {
-    router.push("./settings");
+    router.push("/settings");
   };
 
   return (
@@ -27,7 +31,7 @@ export default function HomeScreen() {
         Start monitoring and walk through the fall-response flow.
       </ThemedText>
 
-      <ThemedText style={styles.body}>State: {getFallEvent().state}</ThemedText>
+      <StatusBadge state={getFallEvent().state} />
       <TouchableOpacity onPress={handleStartMonitoring} style={styles.link}>
         <ThemedText type="link">Start monitoring</ThemedText>
       </TouchableOpacity>
