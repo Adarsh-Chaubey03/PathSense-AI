@@ -129,6 +129,7 @@ has a documented justification for elderly-audience trust and app store complian
 
 <!-- Communications -->
 <uses-permission android:name="android.permission.VIBRATE" />
+<uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 <uses-permission android:name="android.permission.CALL_PHONE" />
 <uses-permission android:name="android.permission.SEND_SMS" />
@@ -335,36 +336,83 @@ UI
 ### Backend Services
 
 ```
-Runtime             Python 3.11 + FastAPI (async)
-                    Consistent with existing PathSense ML stack.
-                    All model inference dependencies (PyTorch, ONNX) are
-                    already in the same ecosystem.
+Runtime             Bun 1.x + Express 4.x
+                    TypeScript throughout — same language as the mobile app,
+                    shared type definitions for the fall event schema,
+                    alert payloads, and Redis key contracts can live in a
+                    common types/ package consumed by both sides.
+                    Bun is chosen over plain Node.js for:
+                      - Native TypeScript execution (no tsc build step needed
+                        during hackathon development)
+                      - Significantly faster cold starts and I/O throughput
+                      - Built-in .env loading, test runner, and bundler
+                      - Compatible with the full npm/Node.js ecosystem
 
-Task Queue          Celery 5 + Redis broker
-                    Async dispatch of SOS alerts, ETA polling, and
-                    escalation timers. Celery beat handles scheduled jobs.
+Project structure
+  server/
+  ├── src/
+  │   ├── index.ts               Express app entry point
+  │   ├── routes/
+  │   │   ├── location.ts        /api/v1/location/*
+  │   │   ├── fall.ts            /api/v1/fall/*
+  │   │   └── sos.ts             /api/v1/sos/*
+  │   ├── workers/
+  │   │   ├── alertWorker.ts     BullMQ worker: SOS push dispatch
+  │   │   ├── etaWorker.ts       BullMQ worker: ETA polling + escalation
+  │   │   └── escalationWorker.ts BullMQ worker: 108 + BLE trigger logic
+  │   ├── services/
+  │   │   ├── redis.ts           ioredis client + location cache helpers
+  │   │   ├── firebase.ts        Firebase Admin SDK (FCM dispatch)
+  │   │   ├── twilio.ts          Twilio SMS + voice call helpers
+  │   │   └── socket.ts          socket.io server for live event tracking
+  │   ├── db/
+  │   │   ├── models/            Mongoose model files (User, FallEvent, Calibration, FalseAlarmLog)
+  │   │   └── client.ts          Mongoose connection singleton
+  │   └── types/
+  │       ├── fallEvent.ts       Shared FallEvent, Severity, Context types
+  │       └── redisKeys.ts       Redis key builders + TTL constants
+  ├── package.json
+  ├── bunfig.toml
+  └── .env
 
-Location Cache      Redis 7
+Task Queue          BullMQ + Redis
+                    Node.js-native job queue backed by Redis.
+                    Replaces Celery entirely. Three named queues:
+                      alert-dispatch   SOS FCM push + SMS + WhatsApp send
+                      eta-monitor      60s repeating ETA re-evaluation job
+                      escalation       108 dial trigger, BLE server-push
+                    BullMQ is type-safe with generics for job data payloads.
+                    Jobs are added from Express route handlers.
+                    Workers run in the same Bun process (hackathon simplicity)
+                    or can be split to separate worker processes for scale.
+
+Location Cache      Redis 7 (via ioredis)
                     TTL-based last-known location store.
                     See Section 8 for full key schema and TTL strategy.
 
-Database            PostgreSQL 15
-                    User profiles, SOS contact lists, fall event history,
-                    per-device calibration backup, anonymized false alarm
-                    aggregate data for model improvement.
+Database            — see note below —
 
-Push                Firebase Admin SDK (Python)
+Push                firebase-admin (Node.js SDK)
                     Server-side FCM dispatch to SOS contact devices.
+                    Same API surface as the Python SDK, identical behaviour.
 
-SMS / Call          Twilio Python SDK
+SMS / Call          twilio (Node.js SDK)
                     Fallback SMS to SOS contacts if FCM push fails.
                     Programmatic call to 108 for MAJOR fall events.
                     WhatsApp Business API via Twilio for SOS contact
                     alerts (high open-rate in Indian user base).
 
+Real-time           socket.io 4.x
+                    WebSocket server for live fall event tracking.
+                    SOS contact app connects to /fall/live/:eventId room.
+                    Server emits: eta_update, sos_arrived, escalation_fired.
+
 Containerization    Docker + Docker Compose
-                    Services: api, redis, postgres, celery-worker,
-                    celery-beat, nginx-proxy
+                    Services: api (Bun), redis, mongodb, nginx-proxy
+                    Bun Docker image: oven/bun:1 (official, ~95MB)
+                    docker compose up spins the full stack in one command.
+                    MongoDB Atlas free tier (M0) is a zero-Docker alternative
+                    for hackathon development — one connection string in .env.
 
 API Surface
   POST  /api/v1/location/cache        Receive 60s location ping from device
@@ -373,8 +421,14 @@ API Surface
   POST  /api/v1/sos/eta               Receive ETA update from SOS contact device
   POST  /api/v1/sos/resolve           Mark event resolved or false alarm
   GET   /api/v1/fall/history/:userId  Fetch fall event history
-  WS    /api/v1/fall/live/:eventId    Real-time event tracking socket during active event
+  WS    /api/v1/fall/live/:eventId    socket.io room for real-time event tracking
 ```
+
+> **Database: MongoDB 7 + Mongoose 8**
+> The fall event schema (Section 10) is a deeply nested JSON document — MongoDB's
+> document model is a natural fit. No migrations, flexible schema iteration mid-hack,
+> and Atlas free tier (M0) means zero local infrastructure needed.
+> `MONGODB_URI` in `.env` is the only config required.
 
 ### On-Device ML Model (Fall Classifier)
 
@@ -449,7 +503,7 @@ GPS                     0.016 Hz         Location cache (every 60 seconds).
 
 Microphone              On-trigger        Post-fall ambient audio clip (3–5s).
                         only             Washroom echo, market noise, road traffic.
-                                         "I'm OK" voice confirmation listening (8s).
+                                         "I'm OK" voice confirmation listening (10s).
                                          NOT continuously recording — privacy first.
 
 Camera                  On-trigger        Optional post-fall scene snapshot.
@@ -597,7 +651,6 @@ Window:     200ms after Stage 1 trigger
 Trigger (ALL conditions must be met):
   acc_magnitude    > personal_impact_threshold  (calibrated, default 2.5g)
   gyr_magnitude    > personal_rotation_threshold (calibrated, default 1.2 rad/s)
-  Orientation change > 45° in at least one axis (pitch OR roll)
 
 Extended window:
   If no impact in 200ms but acc_magnitude remains below 0.8g (still falling),
@@ -669,8 +722,10 @@ Recovery States:
 
   IMMOBILE              No significant motion for > 25 continuous seconds.
                         acc_magnitude variance < 0.04 g² sustained.
-                        → Hard escalation trigger regardless of ML output.
-                        Advance immediately to Stage 5 without waiting.
+                        → Hard escalation trigger: bypass ML fusion entirely.
+                        → Severity is set to MAJOR directly. Do not run fusion.
+                        Advance immediately to Stage 5 for context enrichment
+                        and alert dispatch only — severity is already decided.
 
   PROGRESSIVE_MOTION    Gradual increase in motion over 10–25s window.
                         User is slowly getting up. Do NOT suppress alert.
@@ -705,7 +760,12 @@ ML Inference:
     Use rule-based severity score exclusively (Section 6.1).
     Do NOT suppress the alert — fail-safe bias applies.
 
-Final Severity Fusion:
+IMMOBILE Override:
+  If Stage 4 recovery state = IMMOBILE:
+    Skip fusion. Set severity = MAJOR unconditionally.
+    Proceed directly to alert dispatch with context enrichment only.
+
+Final Severity Fusion (all non-IMMOBILE cases):
   severity_score = (0.55 × ML_output) + (0.30 × rule_score) + (0.15 × context_modifier)
   Final severity level = MINOR | SEMI_MAJOR | MAJOR (see Section 6.2)
 
@@ -882,3 +942,1186 @@ Final severity_score = (0.55 × ML_output) + (0.30 × rule_score) + (0.15 × con
 
 ─────────────────────────────────────────────────────────────────────────────
 LEVEL
+ 1 — MINOR FALL                            severity_score < 0.45
+─────────────────────────────────────────────────────────────────────────────
+Characteristics:
+  Impact typically < 3g.
+  User showed IMMEDIATE_RECOVERY (back up within 3–8s).
+  Orientation shift moderate (phone did not end up fully horizontal).
+  No staircase, ditch, or vehicle context.
+
+Interpretation: User stumbled and recovered. Probably embarrassed, not injured.
+                Risk is low but a check-in is appropriate.
+
+Actions:
+  1. Vibrate phone + audio prompt: "Did you fall? Tap OK to let us know you're fine."
+  2. 10-second window for user to cancel (tap or say "I'm fine").
+  3. If no cancel:
+     → Push notification to all SOS contacts:
+       "Possible minor fall detected for [Name] at [Location] at [Time].
+        They may need assistance. Please check in with them."
+  4. No 108 call.
+  5. No BLE broadcast.
+  6. Log event. Monitor for motion over next 2 minutes.
+     If user becomes IMMOBILE after alert fires → escalate to SEMI_MAJOR.
+
+─────────────────────────────────────────────────────────────────────────────
+LEVEL 2 — SEMI-MAJOR FALL                       severity_score 0.45–0.75
+─────────────────────────────────────────────────────────────────────────────
+Characteristics:
+  Impact typically 3–6g.
+  DELAYED_RECOVERY (took 10–25s to show motion) OR IMMOBILE for 20–25s.
+  Significant orientation shift.
+  May include staircase or ditch context.
+
+Interpretation: User fell hard. May be injured. Recovery is uncertain.
+
+Actions:
+  1. Vibrate phone + audio prompt: "We detected a fall. Say I'm fine or
+     tap OK if you're OK. We'll alert your emergency contacts in 10 seconds."
+  2. 10-second audio confirmation window.
+  3. If no cancel:
+     → Push + SMS to all SOS contacts with GPS location, floor level, context tag.
+     → Start ETA timer (Section 7.3).
+  4. If no SOS contact acknowledges within 30 seconds of alert dispatch:
+     → Escalate to 108 call (Section 7.4).
+  5. If SOS contact acknowledges and ETA is acceptable (Section 7.3):
+     → Hold 108 escalation. Monitor ETA progress.
+  6. BLE broadcast is triggered if context = indoor_crowded
+     OR if all SOS contacts are > 10 minutes away.
+
+─────────────────────────────────────────────────────────────────────────────
+LEVEL 3 — MAJOR FALL                            severity_score > 0.75
+─────────────────────────────────────────────────────────────────────────────
+Characteristics:
+  Impact > 6g OR IMMOBILE for > 25s.
+  Likely complete loss of consciousness or severe injury.
+  May include vehicle ejection, severe staircase, ditch context.
+
+Interpretation: User is likely incapacitated. Immediate professional response needed.
+
+Actions:
+  1. Brief audio prompt (3 seconds only): "Emergency services are being contacted.
+     Say I'm fine if you can hear this."
+  2. 3-second window ONLY.
+  3. Simultaneously:
+     → Push + SMS to all SOS contacts.
+     → Initiate 108 call (Section 7.4) — does NOT wait for SOS response.
+     → Trigger BLE emergency broadcast (Section 7.5).
+  4. Log full sensor snapshot, GPS, floor level, context to backend immediately.
+     (Pre-emptive in case phone dies or connectivity drops.)
+  5. NO dependency on SOS ETA — 108 is called regardless.
+```
+
+---
+
+## 7. Alert Escalation System
+
+### 7.1 Full Escalation Chain
+
+```
+FALL DETECTED
+      │
+      ▼
+Audio Confirmation Window (3–10s depending on severity)
+      │
+      ├──[User cancels]──────────────────────────────► Log as false alarm.
+      │                                                Update false alarm fingerprint DB.
+      │
+      └──[No cancel / timeout]
+            │
+            ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ TIER 1: SOS Contact Push Notification + SMS                 │
+   │ Sent immediately to all registered SOS contacts             │
+   │ Payload: name, GPS link, floor level, context tag, time     │
+   │ SMS + WhatsApp sent if no FCM ack in 15s                    │
+   └─────────────────────────────────────────────────────────────┘
+            │
+            ▼
+   ETA Timer starts (Section 7.3)
+            │
+            ├──[SOS contact responds + ETA acceptable]──────────► Monitor ETA.
+            │                                                       Hold 108 if on track.
+            │                                                       BLE broadcast if crowded.
+            │
+            ├──[No SOS response in 30s]────────────────────────► TIER 2: Alert 108.
+            │
+            ├──[SOS ETA > threshold AND severity = SEMI_MAJOR]──► TIER 2: Alert 108.
+            │
+            └──[Severity = MAJOR]───────────────────────────────► TIER 2: Alert 108.
+                                                                    (Simultaneous with Tier 1)
+            │
+            ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ TIER 2: 108 Emergency Services Call (Section 7.4)          │
+   └─────────────────────────────────────────────────────────────┘
+            │
+            ▼
+   ┌─────────────────────────────────────────────────────────────┐
+   │ TIER 3: BLE Emergency Broadcast (Section 7.5)              │
+   │ Triggered by: indoor_crowded context                        │
+   │               OR SOS ETA > 10 min AND severity ≥ SEMI_MAJOR │
+   │               OR MAJOR fall regardless of context           │
+   └─────────────────────────────────────────────────────────────┘
+            │
+            ▼
+   Event remains open until:
+   - User manually clears it from phone
+   - SOS contact marks "Reached them" in their app
+   - 108 services confirm dispatch
+```
+
+### 7.2 SOS Contact Alert
+
+SOS contacts are pre-registered by the user during setup. Recommended: 2–5 contacts.
+They must have the app installed to receive push notifications. SMS is always the
+fallback and requires no app installation.
+
+```
+Push Notification (FCM via Firebase):
+  Title:    "⚠ FALL ALERT — [User Name]"
+  Body:     "[Name] may have fallen at [Time]. Tap to see location and details."
+  Data:     { eventId, lat, lng, floor_level, severity, context, timestamp }
+  Priority: High (wakes screen on Android, critical notification on iOS)
+
+In-app SOS Contact View (when they tap notification):
+  - Live map with user's last cached GPS pin
+  - Severity badge (MINOR / SEMI-MAJOR / MAJOR)
+  - Context tag ("Outdoors", "Possible staircase fall", etc.)
+  - Floor level ("Floor 2")
+  - "I'm heading there" button → starts ETA reporting (see Section 7.3)
+  - "I've reached them" button → closes event
+  - "Call [User Name]" button → direct dial
+
+SMS Fallback (Twilio):
+  Sent if FCM push not acknowledged within 15 seconds.
+  "FALL ALERT: [Name] may have fallen at [Time]. Location: [Google Maps link].
+   Floor: [N]. Reply with your ETA in minutes or call [User Phone]."
+
+WhatsApp (Twilio WhatsApp API):
+  Sent at the same time as the SMS fallback (both fire together when FCM
+  goes unacknowledged for 15s). SMS guarantees delivery on any phone;
+  WhatsApp reaches the contact faster if they are online.
+  Same message content, with Maps link.
+```
+
+### 7.3 ETA-Based Decision Logic
+
+When an SOS contact taps "I'm heading there", their device begins sharing location
+via the WebSocket connection. The system computes whether they can arrive in time.
+
+```
+ETA Computation:
+  contact_distance_m = haversine(contact_lat, contact_lng, user_lat, user_lng)
+  ETA Estimation:
+    If driving:     contact_distance_m / 500m per minute = ETA minutes
+                    (500 m/min = 30 km/h urban average with traffic)
+    If walking:     contact_distance_m / 80m per minute = ETA minutes
+    Mode inferred:  If contact_distance_m > 500m → assume driving
+                    If contact_distance_m ≤ 500m → assume walking
+
+ETA Thresholds:
+  MINOR fall:     SOS ETA ≤ 15 min → no 108 escalation. Monitor.
+                  SOS ETA > 15 min → fire BLE broadcast. Still no 108.
+                  If user becomes immobile while waiting → escalate to SEMI_MAJOR.
+
+  SEMI_MAJOR fall: SOS ETA ≤ 8 min → hold 108. Monitor closely.
+                   SOS ETA > 8 min → alert 108 immediately.
+                   No SOS response in 30s → alert 108 immediately.
+
+  MAJOR fall:     108 is always called regardless of SOS ETA.
+
+ETA Drift Check:
+  Re-evaluate ETA every 60 seconds against contact's live GPS.
+  If contact has not moved toward user for > 2 minutes (ETA increasing):
+    → Escalate: fire 108 if not already alerted.
+  If contact arrives (within 50m of user GPS):
+    → Send "SOS contact has arrived" notification to user's phone.
+    → Play audio: "[Contact Name] has reached you."
+    → Event resolution prompted on contact's phone.
+
+No SOS Response Protocol:
+  If no SOS contact taps "I'm heading there" within 30 seconds of notification:
+    → Assume contacts are unreachable (sleeping, no connectivity, missed alert).
+    → Fire 108 immediately for SEMI_MAJOR.
+    → For MINOR: send a follow-up push reminder after 60s. Still no 108.
+```
+
+### 7.4 108 Emergency Integration
+
+India's 108 service does not have a public REST API for programmatic dispatch.
+The integration strategy is multi-layered:
+
+```
+Layer 1 — Automated Call via react-native-communications:
+  react-native-communications calls 108 directly using:
+    Linking.openURL('tel:108')  on iOS
+    IntentLauncher (phone call intent) on Android
+
+  A pre-recorded voice message is played when 108 connects:
+    "This is an automated emergency call from FallSense. An elderly person
+     named [Name] has fallen at [Address/GPS coordinates], Floor [N].
+     Last known location: latitude [X], longitude [Y].
+     Please send help immediately. The person is [RESPONSIVE / UNRESPONSIVE]."
+
+  Responsiveness is determined by:
+    RESPONSIVE   = User moved or responded to audio prompt.
+    UNRESPONSIVE = IMMOBILE > 25s and no audio confirmation.
+
+Layer 2 — SMS to 108 (state-dependent, some states support SMS to 108):
+  Message:
+    "EMERGENCY: Elderly person fell. Name: [Name]. Location: [Maps link].
+     Floor: [N]. Status: [Responsive/Unresponsive]. Call auto-initiated."
+
+Layer 3 — Twilio Programmable Voice (if Layer 1 fails):
+  Twilio places a call from a registered Indian virtual number to 108.
+  Uses text-to-speech to deliver the same emergency message.
+  This is the backend fallback when the device cannot initiate a call
+
+  (phone is locked, screen is cracked, call rejected by device).
+  Log each 108 attempt to MongoDB:
+    FallEvent.findByIdAndUpdate(eventId, {
+      'alertChain.call108InitiatedAt': new Date(),
+      'alertChain.call108Method': layerUsed })
+
+Layer 4 — NEMS / State Helpline Integration (Future):
+  Several Indian states have API-accessible emergency dispatch systems.
+  This is a roadmap item for integration as official APIs become available.
+  For now, document and track: Andhra Pradesh, Telangana, Karnataka pilots.
+
+Post-Call Logging:
+  Call timestamp, duration (if connected), layer used → logged to backend.
+  SOS contacts are notified: "108 has been alerted. They are en route."
+```
+
+### 7.5 Bluetooth Emergency Broadcast
+
+When a SEMI_MAJOR or MAJOR fall occurs in a crowded area, or when SOS contacts
+are too far away, FallSense broadcasts a BLE advertisement packet so that nearby
+devices running the FallSense app can receive the alert and assist.
+
+```
+Android BLE Advertising (via react-native-ble-advertiser):
+  Advertisement packet structure (31 bytes max):
+    Bytes 0–1:    Manufacturer ID  (FallSense app identifier: 0xFF, 0xFA)
+    Bytes 2–3:    Protocol version
+    Bytes 4–5:    Severity level   (0x01 MINOR, 0x02 SEMI, 0x03 MAJOR)
+    Bytes 6–13:   Latitude         (IEEE 754 float64 / double, 8 bytes)
+    Bytes 14–21:  Longitude        (IEEE 754 float64 / double, 8 bytes)
+    Bytes 22–23:  Floor index      (int16)
+    Bytes 24–25:  Context tag      (enum: OUTDOOR, INDOOR, BATHROOM, MARKET, STAIRCASE)
+    Bytes 26–31:  Reserved / checksum
+
+  Broadcast interval: 100ms (high-frequency for emergency)
+  Broadcast duration: Until event is resolved or 15 minutes, whichever comes first.
+  TX Power:      High (maximum range, approximately 50–80m in open space).
+
+iOS BLE Advertising (Peripheral Background Mode):
+  iOS restricts background peripheral advertising — the advertisement packet
+  shrinks to service UUIDs only when backgrounded.
+  Mitigation:
+    Use a registered custom Service UUID that FallSense scanning devices look for.
+    Nearby iOS FallSense devices in background central mode will detect the UUID
+    and trigger a local notification.
+    This is less rich than Android but still achieves the proximity alert goal.
+
+Nearby Device Reception (BLE Central):
+  All FallSense-installed devices within range are continuously scanning for
+  the FallSense manufacturer ID (Android) or service UUID (iOS).
+  Scanning power cost: approximately 2–4 mA, negligible on modern devices.
+
+  On detection:
+    Show full-screen notification:
+      "🆘 NEARBY EMERGENCY
+       An elderly person has fallen near you.
+       [Severity] fall detected [N] meters away.
+       [Map pin showing direction]
+       Tap to see location and assist."
+
+  Privacy:
+    The broadcast contains NO personal identifying information.
+    Name, phone number, and user ID are NOT in the BLE packet.
+    Detailed info is only available to registered SOS contacts via FCM.
+    Nearby responders see only: location, floor, severity, context.
+```
+
+---
+
+## 8. Location Caching Strategy (Redis)
+
+The Redis location cache exists for one critical purpose: preserving the user's
+last known position when GPS becomes unavailable after a fall (phone face-down,
+body blocking GPS antenna, loss of connectivity, device trauma).
+
+### Cache Write Strategy
+
+```
+Frequency:     Every 60 seconds when app is running or backgrounded.
+Trigger:       react-native-background-fetch (iOS) /
+               react-native-background-actions foreground service (Android).
+Condition:     Only write if GPS accuracy < 50m.
+               Do not write stale or low-accuracy fixes — a 200m-accuracy
+               fix is worse than a 60-second-old accurate fix.
+```
+
+### Redis Key Schema
+
+```
+Key: user:{userId}:location:latest
+Type: Hash
+Fields:
+  lat           Latitude (float, 6 decimal places)
+  lng           Longitude (float, 6 decimal places)
+  accuracy_m    GPS horizontal accuracy in meters
+  altitude_m    GPS altitude in meters (for floor-level context)
+  speed_ms      Speed in m/s (used for vehicle context detection)
+  heading_deg   Compass heading
+  ts            ISO8601 timestamp
+  source        "gps" | "network" | "fused"
+TTL: 86400 seconds (24 hours)
+
+Key: user:{userId}:location:history
+Type: List (LPUSH, capped to 60 entries = 60 minutes of history)
+Value: JSON string of same fields as above
+TTL: 86400 seconds
+
+Key: user:{userId}:fall:event:{eventId}
+Type: Hash
+Fields: (full event schema — see Section 10)
+TTL: 2592000 seconds (30 days)
+
+Key: user:{userId}:fall:active
+Type: String ("true" | "false")
+TTL: 3600 seconds (auto-expires if never resolved)
+
+Key: sos:{contactId}:eta:{eventId}
+Type: Hash
+Fields:
+  eta_minutes       Estimated minutes to arrival
+  distance_m        Distance to user at time of last update
+  last_update_ts    Timestamp of most recent ETA update
+  status            "en_route" | "arrived" | "unavailable"
+TTL: 3600 seconds
+```
+
+### Fallback Chain When Network is Down Post-Fall
+
+```
+1. Device attempts Redis write via mobile data.
+2. If network unavailable:
+   → Store location + event in SQLite queue on device.
+   → Keep retrying every 10 seconds (background fetch).
+3. When connectivity resumes (WiFi reconnects, network available):
+   → Flush queued writes to Redis in order.
+   → Also push fall event to backend API if not already received.
+4. SOS contacts receive the cached-then-flushed location.
+   Alert includes note: "Location from before fall (cached [X] minutes ago)."
+```
+
+---
+
+## 9. False Alarm Prevention
+
+False alarms are a primary UX failure mode for this system. Every false alert
+that reaches an SOS contact degrades trust and causes alert fatigue. The goal is
+< 1 false alarm per user per week under normal daily use.
+
+False alarm prevention is a multi-layer gate, not a single check. Each layer
+independently reduces the false alarm rate. Together they form a high-specificity
+pipeline while preserving sensitivity for real falls.
+
+### 9.1 Pre-Event Gate: Gait and Motion Context
+
+The most powerful false alarm gate is asking: "What was the user doing before this?"
+
+```
+Gate rule: A fall candidate is treated with HIGH suspicion unless the 2-second
+pre-event window contains a plausible pre-fall motion context.
+
+Accepted pre-contexts (fall is plausible):
+  WALKING           User was walking. A stumble or trip is likely.
+  UNSTABLE_GAIT     User was already showing gait instability. High probability.
+  STATIONARY        User was standing still. Fainting or sudden loss of balance.
+                    Requires slightly higher impact threshold (no trip momentum).
+
+Rejected pre-contexts (fall is unlikely):
+  IN_VEHICLE        Likely speed bump, pothole, or road vibration.
+                    Only escalate if impact > 5g (vehicle ejection risk).
+  PHONE_HANDLED     Phone was actively being manipulated 0–3 seconds before event.
+                    Classify as: user dropped/threw phone. Suppress automatically.
+  RUNNING           High-speed falls are possible but signatures differ.
+                    Require orientation shift > 70° (hard drop) not just a stumble.
+                    Running fall suppression reduces athlete/jogger false alarms.
+```
+
+### 9.2 Throw vs Fall Disambiguation
+
+This gate specifically handles the scenarios raised:
+"throwing phone on bed" and "throwing phone to someone to catch."
+
+```
+Throw-to-bed detection:
+  Signature:  Short airborne phase (< 400ms).
+              Impact soft: peak_g < 1.5g (bed mattress).
+              Post-impact: phone lying flat, NO recovery motion at all.
+              Pre-event: phone was STATIONARY or PHONE_HANDLED.
+              No gait pattern in 5s before event.
+  Action:     SUPPRESS automatically. Log as THROW_SOFT event.
+
+Throw-to-person detection:
+  Signature:  Short airborne phase.
+              No hard impact spike — instead, smooth deceleration at catch point.
+              Catch = gradual reduction in acc_magnitude rather than sudden spike.
+              Gyroscope: chaotic multi-axis spin (consistent with thrown object).
+              No prior gait.
+  Action:     SUPPRESS automatically. Log as THROW_CAUGHT event.
+
+General throw vs human fall differentiation table:
+──────────────────────────────────────────────────────────────────────────────
+Feature                   Human Fall          Phone Throw
+──────────────────────────────────────────────────────────────────────────────
+Pre-event motion state    WALKING/STATIONARY  PHONE_HANDLED/STATIONARY
+Pre-event gait pattern    Present             Absent
+Airborne duration         300–700ms           100–400ms
+Free-fall trajectory      Controlled arc      Chaotic / erratic
+Gyroscope during fall     Axis-aligned arc    Random multi-axis spin
+Impact type               Hard spike (floor)  Soft (bed) or absent (caught)
+Post-impact orientation   Near-horizontal     Varies widely
+Post-impact motion        Recovery motion OR  Completely still
+                          immobility
+Phone orientation          Vertical (pocket)  Varies (often flat)
+before event              Pitch ~80–90°       No consistent pattern
+──────────────────────────────────────────────────────────────────────────────
+Confidence reduction: If 3+ throw features match → reduce severity score by 50%.
+                      If all throw features match → SUPPRESS.
+```
+
+### 9.3 Impact Surface Signature
+
+Post-impact vibration decay reveals what surface the phone landed on.
+This helps distinguish falls on soft surfaces (bed, couch, grass) from
+falls on hard surfaces (floor, road, tiles).
+
+```
+Analysis:   100ms window immediately after impact spike.
+            Compute vibration decay rate and residual oscillation amplitude.
+
+Hard surface (floor, concrete, tiles):
+  Sharp spike (> 2g), rapid decay (< 50ms), brief ringing (high-frequency residual).
+  Consistent with a human fall on a hard surface.
+  → Proceed normally.
+
+Soft surface (bed, mattress, carpet, grass):
+  Low spike (< 1.5g), slow decay (> 150ms), no ringing, damped oscillation.
+  Consistent with: phone thrown on bed, person falling on mattress,
+  rolling onto soft ground.
+  → Apply: REDUCE_CONFIDENCE by 30%.
+  → Require audio confirmation before alert dispatch.
+  → If user confirms fine → log as soft_surface_false_alarm.
+
+Rationale for not suppressing soft-surface falls entirely:
+  An elderly person falling on carpet or grass is still a fall worth checking.
+  The impact is softer, but the person may still be injured (hip fracture on soft fall).
+  Suppression would be unsafe. Instead: require confirmation before escalating.
+```
+
+### 9.4 Depth and Altitude Context
+
+The existing MiDaS depth estimation model from PathSense core provides an additional
+signal for post-fall context analysis.
+
+```
+Triggered:  If camera is accessible and face-up after fall (detected via orientation).
+            Camera is NOT continuously active — triggered on fall confirmation only.
+
+Depth map analysis:
+  Flat ground plane detected at < 0.5m depth:
+    → Phone is lying on a flat surface. Consistent with fall.
+    → No modification to severity.
+
+  No ground plane detected (depth > 2m everywhere):
+    → Phone may be in the air, on a ledge, or face-down against wall.
+    → Best-effort signal only. Do not suppress based on this alone.
+
+  Elevated structure detected below phone (depth > 0.8m but soft texture):
+    → Phone may be on a bed or sofa (combined with soft impact signature).
+    → Increase throw/soft-surface confidence. Apply REDUCE_CONFIDENCE.
+
+Barometric altitude cross-check:
+  Compare current barometric altitude to last cached barometric reading.
+  Sudden altitude increase (> 0.3 hPa = ~2.5m) after impact:
+    → Phone went UP, not down. Consistent with being thrown upward.
+    → SUPPRESS fall detection. Log as throw event.
+
+  Sudden altitude decrease (> 0.4 hPa = ~3.3m) after impact:
+    → Phone went significantly down. Consistent with ditch or staircase.
+    → Tag context accordingly. Apply severity OVERRIDE minimum SEMI_MAJOR.
+
+Floor-level note:
+  For falls on 1st floor vs ground floor:
+    The floor_index computation (Section 5.5) operates at ~50cm resolution.
+    A person falling on the 1st floor (~3m above ground) is easily differentiated
+    from a ground-floor fall. This is NOT used to suppress alerts —
+    floor level is recorded and included in all emergency communications.
+    Being on the 1st floor is not a reason to doubt a fall occurred.
+```
+
+### 9.5 Audio Confirmation Flow
+
+The audio confirmation is the user's last chance to cancel before any alert fires.
+It must be fast, loud, and require minimal physical effort — designed for a person
+who may be on the ground and possibly disoriented.
+
+```
+Trigger:    After Stage 5 confirms fall candidate (any severity level).
+            Exception: MAJOR fall + IN_VEHICLE context → skip confirmation,
+                       alert immediately (life-threatening scenario).
+
+Confirmation prompt sequence:
+  1. Phone vibrates in a strong, distinctive pattern: 3 short pulses, 1 long.
+     Designed to be felt even if phone is face-down in pocket.
+  2. Volume is forced to maximum (requires MODIFY_AUDIO_SETTINGS permission).
+  3. react-native-tts speaks:
+     MINOR:      "Did you fall? Say I'm fine or tap the screen to cancel."
+     SEMI-MAJOR: "We detected a fall. Say I'm fine to cancel.
+                  We will alert your contacts in 10 seconds."
+     MAJOR:      "Emergency services are being contacted. Say I'm fine to cancel."
+
+Listening window:
+  MINOR:      10 seconds
+  SEMI-MAJOR: 10 seconds
+  MAJOR:      3 seconds only
+
+Voice recognition (@react-native-voice/voice):
+  Listens for: "I'm fine", "I'm ok", "I'm okay", "cancel", "stop", "theek hoon",
+               "main theek hoon", "nahi gira", common regional phrases.
+  Uses on-device speech recognition (Android SpeechRecognizer, iOS SFSpeechRecognizer).
+  No cloud round-trip — works offline.
+  On match: Cancel fall event. Log as USER_CANCELLED.
+
+Screen tap override:
+  Large full-screen cancel button shown during confirmation window.
+  Minimum tap target: 200 × 200 dp (easily tapped with shaking hands).
+  Button text: "I'M OK — CANCEL ALERT"
+  Button color: Green, high contrast.
+
+Countdown timer:
+  Visible on screen (if phone is face-up): large countdown number.
+  Audible countdown: "3... 2... 1... Alerting your contacts now."
+
+Confirmation result states:
+  USER_CANCELLED:   User said "I'm fine" or tapped button. → Section 9.6.
+  TIMEOUT_NO_RESP:  Window elapsed, no input. → Fire alert chain.
+  VOICE_CONFIRMED:  User spoke but said something other than a cancel phrase.
+                    → Treat as no response. Fire alert chain.
+```
+
+### 9.6 Device-Local Adaptive Learning
+
+Every confirmed false alarm teaches the system about this specific user's behavior.
+The false alarm fingerprint database lives entirely on-device in SQLite.
+No personal data leaves the device for this feature (opt-out of aggregate sync).
+
+```
+False Alarm Fingerprint Record (SQLite table: false_alarm_fingerprints):
+──────────────────────────────────────────────────────────────────────────────
+  id                  UUID
+  timestamp           ISO8601 when the event occurred
+  cancellation_method "voice" | "tap" | "shadow_label"
+  imu_vector_2s       JSON array: 200-sample × 11-channel IMU window
+                      This is the raw fingerprint.
+  impact_peak_g       Recorded impact magnitude
+  orientation_shift   Recorded orientation change in degrees
+  recovery_time_s     Recorded recovery time
+  surface_type        "hard" | "soft" | "unknown"
+  motion_state_pre    Motion state before fall candidate
+  context_tag         Context detected (indoor, outdoor, etc.)
+  similarity_used     Whether this fingerprint has been matched before
+──────────────────────────────────────────────────────────────────────────────
+
+Matching at inference time:
+  When a new fall candidate reaches Stage 5:
+    Compute cosine similarity between the new 2s IMU vector and all stored
+    false alarm fingerprints.
+    If max_similarity > 0.88 (high match):
+      → Tag the event: LIKELY_FALSE_ALARM.
+      → Extend audio confirmation window by 5 seconds.
+      → Reduce severity by one level for alert dispatch only
+        (severity score is preserved for logging).
+    If max_similarity 0.70–0.88 (partial match):
+      → Require audio confirmation even for MINOR falls.
+      → Do not auto-suppress.
+
+Database management:
+  Maximum 500 fingerprint records per device.
+  FIFO eviction when limit is reached (oldest removed).
+  Records older than 180 days are automatically pruned.
+
+Aggregate feedback (opt-in only):
+  With user consent, anonymized false alarm aggregate data (counts per context,
+  distribution of impact values at false alarm, NOT raw IMU vectors) is synced
+  to the backend for model improvement across the user base.
+  Raw IMU vectors never leave the device.
+
+Recalibration trigger from false alarms:
+  If > 5 false alarms are recorded within 7 days:
+    → Notify user: "FallSense has detected a pattern. Would you like to
+       recalibrate to reduce false alerts?"
+    → Trigger calibration Day 1–2 passive re-collection.
+    → Raise personal_impact_threshold by one standard deviation.
+```
+
+---
+
+## 10. Data Schema
+
+### Fall Event Object (Device + Backend)
+
+```json
+{
+  "event_id": "uuid-v4",
+  "user_id": "uuid-v4",
+  "device_id": "uuid-v4",
+  "timestamp_detected": "2025-01-15T14:23:11.442Z",
+  "timestamp_resolved": "2025-01-15T14:31:05.001Z",
+
+  "severity_level": "SEMI_MAJOR",
+  "severity_score": 0.62,
+  "severity_ml_score": 0.59,
+  "severity_rule_score": 0.67,
+  "context_modifier": 0.10,
+
+  "context": {
+    "tag": "indoor_bathroom",
+    "floor_index": 0,
+    "gps_available": true,
+    "gps_accuracy_m": 8.5,
+    "lat": 17.4485,
+    "lng": 78.3908,
+    "altitude_m": 542.3,
+    "baro_delta_hpa": 0.02
+  },
+
+  "imu_snapshot": {
+    "freefall_duration_ms": 310,
+    "impact_peak_g": 3.8,
+    "impact_direction": "forward",
+    "impact_duration_ms": 45,
+    "orientation_shift_deg": 72.3,
+    "recovery_time_s": 18.4,
+    "motion_state_pre_fall": "WALKING",
+    "pre_fall_window_ref": "sqlite://pre_fall_windows/{event_id}"
+  },
+
+  "false_alarm_gate": {
+    "result": "PASS",
+    "throw_confidence": 0.08,
+    "surface_type": "hard",
+    "fingerprint_max_similarity": 0.12
+  },
+
+  "confirmation": {
+    "method": "TIMEOUT_NO_RESP",
+    "window_seconds": 10,
+    "voice_detected": false
+  },
+
+  "alert_chain": {
+    "sos_push_sent_at": "2025-01-15T14:23:22.001Z",
+    "sos_acknowledged_at": "2025-01-15T14:23:38.004Z",
+    "sos_contact_eta_min": 12,
+    "eta_exceeded_threshold": true,
+    "call_108_initiated_at": "2025-01-15T14:24:08.001Z",
+    "call_108_method": "device_call",
+    "ble_broadcast_started": false,
+    "resolution": "SOS_ARRIVED"
+  },
+
+  "location_source": "live_gps",
+  "last_cached_location_age_s": 47,
+
+  "is_false_alarm": false,
+  "false_alarm_confirmed_by": null
+}
+```
+
+### Calibration Profile (SQLite, per-device)
+
+```json
+{
+  "user_acc_walk_mean": 1.08,
+  "user_acc_walk_stddev": 0.11,
+  "user_step_cadence_hz": 1.82,
+  "user_phone_carry_pitch": 84.2,
+  "user_phone_carry_roll": 5.3,
+  "user_gyr_walk_mean": 0.42,
+  "user_stationary_noise_floor": 0.03,
+  "personal_freefall_threshold": 0.36,
+  "personal_impact_threshold": 2.47,
+  "personal_rotation_threshold": 1.28,
+  "baro_ground_pressure_hpa": 1008.42,
+  "carry_posture_type": "POCKET",
+  "calibration_date": "2025-01-10T08:00:00Z",
+  "calibration_version": 1
+}
+```
+
+---
+
+## 11. Phased Execution Plan
+
+### Phase 1 — Foundation and Sensor Access (Week 1–2)
+
+```
+Goal: Get clean high-frequency sensor data flowing reliably in the background.
+
+Tasks:
+  1.1  Scaffold React Native bare project with TypeScript.
+       Configure Gradle (Android) and Xcode (iOS) build targets.
+
+  1.2  Implement Android Foreground Service for fall detection loop.
+       Use react-native-background-actions with sticky notification.
+       Verify service survives: app backgrounded, screen off, device restart.
+
+  1.3  Integrate react-native-sensors.
+       Configure accelerometer and gyroscope at 100Hz.
+       Pipe output through a ring buffer (circular array, 200-sample depth per channel).
+       Confirm < 5ms latency between sensor event and ring buffer write.
+
+  1.4  Integrate barometer (via react-native-sensors barometric pressure API).
+       Record ground-level baseline on first app launch with valid GPS fix.
+       Compute and store baro_ground_pressure_hpa in AsyncStorage.
+
+  1.5  Implement background GPS location writer.
+       Use @mauron85/react-native-background-geolocation.
+       Write to Redis via FastAPI endpoint every 60 seconds when accuracy < 50m.
+       Implement SQLite queue for when network is unavailable.
+
+  1.6  Build onboarding permission flow.
+       One permission per screen, large text, plain language, elderly-optimized.
+       Track which permissions were granted/denied in AsyncStorage.
+       Show degradation warning banners for denied critical permissions.
+
+  1.7  Build SOS contact management screen.
+       Add/edit/remove up to 5 contacts. Pull from device address book.
+       Store in AsyncStorage. Sync to backend user profile.
+
+Deliverable: Sensor data flowing at 100Hz. Location cached to Redis every 60s.
+             Onboarding complete. SOS contacts configured.
+```
+
+### Phase 2 — Calibration Engine (Week 2–3)
+
+```
+Goal: Build the 5-day passive calibration pipeline.
+
+Tasks:
+  2.1  Implement motion state classifier (Section 5.2) as a native module.
+       Java/Kotlin (Android) implementation reading directly from SensorManager.
+       State changes emitted to JS via event emitter (not polling).
+       Target: < 2ms state transition detection latency.
+
+  2.2  Implement calibration data collection.
+       Collect acc_magnitude, gyr_magnitude, pitch, roll, step peaks
+       during WALKING epochs. Write to SQLite calibration_raw table.
+
+  2.3  Implement calibration analysis job.
+       Runs after Day 2. Computes all personal threshold values.
+       Writes to calibration_profile table in SQLite.
+
+  2.4  Implement shadow mode detection.
+       Run Stage 1 and 2 detection using draft thresholds.
+       Log all shadow detections with full IMU snapshot.
+       Build optional "Did anything unusual happen?" daily check-in UI.
+
+  2.5  Implement recalibration trigger logic.
+       Check gait drift on 7-day rolling window.
+       Prompt user with plain-language recalibration suggestion.
+
+  2.6  Implement calibration backup sync to backend.
+       Encrypted, anonymized. Opt-in consent screen with plain explanation.
+
+Deliverable: Calibration profile computed and stored for a test device.
+             Shadow mode running and logging accurately.
+             Personal thresholds differ measurably from defaults.
+```
+
+### Phase 3 — Fall Detection Pipeline (Week 3–4)
+
+```
+Goal: Full 5-stage fall detection running on-device.
+
+Tasks:
+  3.1  Implement Stage 1 and Stage 2 (free-fall + impact) in native module.
+       Use personal_freefall_threshold and personal_impact_threshold from calibration.
+       Emit FallCandidateDetected event to JS with IMU snapshot.
+
+  3.2  Implement Stage 3 orientation assessment in JS/TypeScript.
+       Compute pitch/roll delta from pre-fall vs post-impact orientation.
+       Classify as fall-consistent or borderline.
+
+  3.3  Implement Stage 4 post-impact monitoring.
+       Monitor acc_magnitude variance every 500ms for 30 seconds.
+       Classify recovery state: IMMEDIATE | DELAYED | IMMOBILE | PROGRESSIVE.
+
+  3.4  Integrate TFLite fall classifier via react-native-fast-tflite.
+       Load FARSEEING/SisFall pre-trained INT8 model on app start.
+       Run inference on fall candidate trigger, not continuously.
+       Verify < 30ms inference latency on mid-range Android device.
+
+  3.5  Implement rule-based severity scorer (Section 6.1).
+       Used as fallback when ML confidence < 0.60.
+
+  3.6  Implement Stage 5 fusion: ML + rule + context (0.55 / 0.30 / 0.15 weights).
+
+  3.7  Implement contextual environment detection (Section 5.5).
+       Barometer-based floor index computation.
+       Barometric ditch/staircase detection.
+       Microphone-based ambient context (triggered post-fall, not continuous).
+       BLE scan for density (market detection).
+
+  3.8  Implement the False Alarm Gate (Sections 9.1–9.4).
+       Throw-to-bed, throw-to-person detection.
+       Surface softness classification from impact decay.
+       Pre-event motion state gate.
+
+Deliverable: End-to-end fall detection working on test device.
+             False alarm gate vetted against throw/drop scenarios.
+             Field test: 20 intentional falls, 20 throw/drop scenarios.
+             Target: ≥ 18/20 falls detected, ≤ 2/20 throws false-alarmed.
+```
+
+### Phase 4 — Audio Confirmation and False Alarm Learning (Week 4–5)
+
+```
+Goal: User confirmation flow and adaptive false alarm suppression.
+
+Tasks:
+  4.1  Build fall confirmation UI.
+       Full-screen overlay. Large green "I'M OK" button (200×200dp minimum).
+       Countdown timer (react-native-reanimated smooth animation).
+       notifee high-priority notification as full-screen intent (Android).
+
+  4.2  Integrate react-native-tts for audio prompt.
+       Force speaker volume to max. Play prompt immediately after vibration.
+       Regional language support: English, Hindi, Telugu, Tamil, Kannada
+       (language selection in user settings, defaults to device language).
+
+  4.3  Integrate @react-native-voice/voice for "I'm fine" recognition.
+       Offline speech recognition. No network dependency.
+       Expand phrase dictionary: English + Hindi + regional equivalents.
+
+  4.4  Implement false alarm fingerprint DB (Section 9.6).
+       SQLite schema for imu_vector_2s storage.
+       Cosine similarity matching at Stage 5.
+       Confidence reduction logic when similarity > 0.88.
+
+  4.5  Implement false alarm logging and recalibration trigger.
+       If > 5 false alarms in 7 days → prompt user for recalibration.
+       Aggregate sync (opt-in).
+
+  4.6  Build False Alarm History screen in app.
+       Shows: time, context, how it was cancelled, similarity score.
+       User can mark any logged event as "actually a real fall" (retroactive).
+
+Deliverable: Audio confirmation working. False alarm DB operational.
+             Lab test: 15 false alarm scenarios, confirm all handled correctly.
+```
+
+### Phase 5 — Alert Dispatch and Backend (Week 5–6)
+
+```
+Goal: Full alert chain operational: SOS push, ETA tracking, 108, BLE.
+
+Tasks:
+  5.1  Scaffold Bun + Express backend.
+       bun init in server/ directory. Install express, ioredis, bullmq,
+       firebase-admin, twilio, socket.io, mongoose, zod.
+       Configure bunfig.toml. Set up .env with Redis URL, MONGODB_URI,
+       Firebase service account path, Twilio credentials.
+       Implement all API endpoints (Section 4, Backend Services) in
+       src/routes/. Use zod for request body validation on every route.
+       Integrate ioredis client (src/services/redis.ts) for location
+       cache reads and writes with the key schema from Section 8.
+       Connect Mongoose in src/db/client.ts on app startup:
+         mongoose.connect(process.env.MONGODB_URI)
+       All five collections (Section Appendix B) defined as Mongoose
+       schemas in src/db/models/. No migrations — schema changes apply
+       immediately on next server start.
+
+  5.2  Implement SOS alert dispatch (Section 7.2).
+       Initialize firebase-admin with service account JSON in src/services/firebase.ts.
+       FCM push via admin.messaging().sendEachForMulticast().
+       On POST /api/v1/sos/dispatch, enqueue an alert-dispatch BullMQ job.
+       alertWorker.ts dequeues and fires FCM. If no FCM ack in 15s,
+       worker enqueues a twilio-sms fallback job automatically.
+       Twilio WhatsApp message sent in the same worker alongside SMS.
+
+  5.3  Build SOS contact receiver app flow.
+       FCM notification handling when app is killed/backgrounded
+       (@react-native-firebase/messaging background handler).
+       Full-screen emergency view with map pin.
+       "I'm heading there" → device connects to socket.io room
+       /fall/live/:eventId and begins emitting location every 10s.
+       Server etaWorker.ts picks up the location stream, computes
+       haversine ETA, emits eta_update back to the room.
+       "I've reached them" → POST /api/v1/sos/resolve → server emits
+       sos_arrived to the room, closes the BullMQ eta-monitor job.
+       Resolution updates the FallEvent Mongoose document:
+         FallEvent.findByIdAndUpdate(eventId, { resolvedAt: new Date(),
+           'alertChain.resolution': 'SOS_ARRIVED' })
+
+  5.4  Implement ETA computation and decision logic (Section 7.3).
+       etaWorker.ts runs as a BullMQ repeatable job every 60 seconds
+       per active event. Reads SOS contact location from the socket.io
+       room state. Computes haversine distance in TypeScript (no lib needed,
+       ~10 lines). Infers drive vs walk from distance. Applies ETA thresholds
+       for MINOR and SEMI_MAJOR from Section 7.3. If ETA drift detected
+       (contact not moving toward user for 2 consecutive checks), worker
+       enqueues an escalation job immediately.
+
+  5.5  Implement 108 integration (Section 7.4).
+       Device-side: react-native-communications auto-dial as Layer 1.
+       Backend Layer 3 fallback: escalationWorker.ts dequeues escalation
+       job and calls twilio.calls.create({ to: '108', twiml: <Say> TwiML
+       with the pre-scripted emergency message + GPS + floor level }).
+       escalationWorker fires only if device signals call failure via
+       POST /api/v1/sos/dispatch with { layer1_failed: true } or if
+       no device acknowledgment arrives within 10s of escalation trigger.
+       Log call SID, timestamp, and layer used to DB for every 108 attempt.
+
+  5.6  Implement BLE broadcast (Section 7.5).
+       Device-side: react-native-ble-advertiser starts advertisement on
+       fall confirmation. Custom manufacturer ID packet encoding per
+       the byte layout in Section 7.5.
+       Server-side community responder push (Section 12 suggestion):
+       escalationWorker queries MongoDB for all users whose last cached
+       location is within 200m of the fallen user using a 2dsphere
+       geospatial index on the User collection's lastLocation field:
+         User.find({ lastLocation: { $near: { $geometry: { type: 'Point',
+           coordinates: [lng, lat] }, $maxDistance: 200 } } })
+       The User.lastLocation field is updated on every 60s Redis write
+       so both Redis (fast TTL cache) and MongoDB (geospatial query) stay
+       in sync. Redis handles the low-latency lookup; MongoDB handles the
+       spatial fan-out query.
+       Fires FCM push to those nearby devices as a server-driven
+       complement to BLE, covering outdoor range beyond BLE reach.
+
+  5.7  Implement full escalation state machine in Zustand (device-side).
+       State: IDLE → CANDIDATE → CONFIRMING → ALERTING → ESCALATING → RESOLVED.
+       Every transition emits a log entry to op-sqlite and a POST to
+       /api/v1/fall/event with the current state and timestamp.
+       Server mirrors the state in Redis key user:{userId}:fall:active
+       so any connected SOS contact app always reflects the live status.
+       Mongoose writes the finalized FallEvent document on RESOLVED
+       transition using FallEvent.create() or findByIdAndUpdate().
+
+Deliverable: Full alert chain tested end-to-end with 3 test devices.
+             SOS contact receives push in < 5 seconds.
+             108 auto-dial fires correctly for MAJOR event.
+             BLE detected on nearby device within 10 seconds.
+```
+
+### Phase 6 — Integration with PathSense Core (Week 6–7)
+
+```
+Goal: FallSense and PathSense share infrastructure cleanly.
+
+Tasks:
+  6.1  Integrate FallSense IMU consumer with PathSense IMU ring buffer.
+       Both consumers read the same buffer without blocking each other.
+
+  6.2  Integrate Safety Supervisor injection.
+       When fall confirmed → PathSense navigation output halts.
+       Resume navigation after event resolved.
+
+  6.3  Integrate MiDaS depth estimation for post-fall context.
+       Triggered on-demand, not continuously. Reuse existing inference pipeline.
+
+  6.4  Integrate shared GPS preprocessor output.
+       FallSense uses PathSense GPS output instead of running a separate GPS reader.
+
+  6.5  Unified local event log.
+       FallSense events appear in PathSense event log.
+       Consistent log format across both modules.
+
+Deliverable: Both modules running simultaneously with no performance regression.
+             Navigation guidance unaffected during non-fall periods.
+             Latency budget verified: fall detection adds < 2ms overhead to navigation loop.
+```
+
+### Phase 7 — Field Testing, Hardening, and Threshold Tuning (Week 7–9)
+
+```
+Goal: Real-world validation. Reduce false alarm rate. Tune thresholds.
+
+Tasks:
+  7.1  Controlled fall study.
+       Recruit 5–10 test participants of varying ages.
+       Perform staged falls: forward, sideways, backward, staircase.
+       Phone in pocket, in hand, in chest mount.
+       Measure: detection rate, severity accuracy, false alarm rate.
+
+  7.2  Daily use false alarm measurement.
+       Deploy to 5–10 elderly users for 2 weeks.
+       Measure: false alarms per user per day in normal activity.
+       Target: < 1 per week per user.
+
+  7.3  Alert latency measurement.
+       Time from fall impact to SOS contact receiving push notification.
+       Target: < 10 seconds end-to-end.
+       Time from fall decision to 108 dial: < 3 seconds.
+
+  7.4  Connectivity edge case testing.
+       Fall with no network → SQLite queue → flush on reconnect.
+       Fall with GPS unavailable → Redis cached location used.
+       Fall with phone face-down → confirm audio confirmation audible.
+
+  7.5  Threshold adjustment from field data.
+       Use shadow mode logs + participant feedback.
+       Adjust personal_impact_threshold and personal_freefall_threshold.
+       Update default fallback thresholds from aggregate data.
+
+  7.6  Battery impact measurement.
+       Measure battery drain over 8 hours of background operation.
+       Target: < 3% additional battery usage per hour vs baseline.
+       Optimize sensor polling rate if target exceeded.
+
+Deliverable: Detection rate ≥ 90% on controlled falls.
+             False alarm rate ≤ 1 per user per week.
+             Alert latency < 10 seconds.
+             Battery overhead < 3%/hr.
+```
+
+### Phase 8 — Accessibility, Localization, and Production Release (Week 9–10)
+
+```
+Goal: App is ready for elderly users in the Indian market.
+
+Tasks:
+  8.1  Accessibility audit.
+       Minimum touch target: 48×48dp (Google standard), 60×60dp for critical buttons.
+       Minimum font size: 18sp for body text, 24sp for alerts.
+       High contrast mode support.
+       Screen reader (TalkBack/VoiceOver) compatibility.
+
+  8.2  Localization.
+       UI: English, Hindi, Telugu, Tamil, Kannada, Bengali, Marathi.
+       Fall confirmation audio prompts in all 7 languages.
+       Language auto-detected from device locale. User can override in settings.
+
+  8.3  Setup wizard for elderly users.
+       Guided 5-step setup: name, language, SOS contacts, permissions, calibration.
+       Voiceover reads every screen. Large back/next buttons.
+       "Help" button on every screen opens a 30-second video guide.
+
+  8.4  Privacy and data compliance.
+       DPDP Act (India Digital Personal Data Protection Act 2023) compliance.
+       GDPR compliance for potential international users.
+       Privacy policy in plain language, in-app, in local language.
+       Explicit consent for: location background, audio, aggregate data sync.
+
+  8.5  App store submission.
+       Google Play: health & fitness category, medical device disclaimer.
+       Apple App Store: health utility, privacy nutrition labels.
+
+  8.6  Post-launch monitoring.
+       Sentry error tracking in React Native.
+       Backend: Grafana dashboards for alert volumes, latency, error rates.
+       Weekly false alarm aggregate review.
+
+Deliverable: App store published. 100 initial users. Monitoring active.
+```
+
+---
+
+## 12. External Suggestions and Open Questions
+
+### Suggested External Integrations
+
+```
+1. Wear OS / Apple Watch (Future Phase)
+   A companion app on the user's smartwatch provides a far more reliable fall
+   detection signal — the watch is wrist-mounted and follows body motion closely.
+   Heart rate data (sudden spike or flatline post-fall) adds a critical biometric
+   severity signal. The phone app becomes the alert dispatcher; the watch is the
+   primary sensor. Strongly recommended as a Phase 2 product extension.
+
+2. UPI-Linked Emergency Pre-Auth (India-Specific)
+   For cases where 108 response requires transport costs (some rural areas),
+   a pre-authorized small UPI payment can facilitate faster response from
+   local transport. Explored as a partnership feature, not a product-core feature.
+
+3. NEMS / Unified Emergency Response API
+   The National Emergency Management System and several state-level 112/108
+   platforms are developing API access. Track: PSAP (Public Safety Answering Point)
+   API availability via the Ministry of Home Affairs and TRAI.
+   When available, replace Twilio call with a structured API dispatch that
+   carries GPS coordinates and patient status in structured form rather than
+   relying on a TTS voice message.
+
+4. On-Device Sound Classification Model
+   A lightweight ambient audio classifier (MobileNet Audio or YAMNet-Tiny quantized
+   to TFLite INT8) would replace the heuristic-based audio context detection.
+   Trained on: bathroom echo, market noise, road traffic, rainfall, silence.
+   Inference on the 3-second post-fall clip in < 50ms.
+   This improves context detection accuracy meaningfully and is worth including
+   in Phase 3 or 4 as an optional upgrade to the rule-based audio analysis.
+
+5. Community Responder Network
+   Extend the BLE broadcast concept to a server-side "nearby responder" push.
+   When a fall is detected, the backend sends a push to all app-installed devices
+   within a 200m radius (computed from last known GPS of both parties).
+   This does NOT require BLE range — it works on GPS proximity via the server.
+   Faster and more reliable than BLE, especially outdoors.
+   Requires: user opt-in to "community responder" mode in settings.
+   Privacy: responders see only: direction, distance (not exact location), severity.
+```
+
+### Open Questions to Resolve Before Phase 3
+
+```
+Q1. Fall dataset availability for Indian elderly users
+    FARSEEING and SisFall are predominantly Western/younger populations.
+    Is there access to Indian elderly fall data for fine-tuning the TFLite model?
+    If not: consider recording a small controlled dataset during Phase 7
+    field testing and fine-tuning the model before production release.
+
+Q2. iOS background sensor access limits
+    iOS restricts background sensor access more aggressively than Android.
+    The Core Motion framework can deliver background accelerometer updates,
+    but only when an active background location session is running.
+    Confirm: is the location background mode (which the app requires) sufficient
+    to piggyback Core Motion sensor access, or is a separate entitlement needed?
+    Test on physical iOS device — simulator does not reflect background limits.
+
+Q3. 108 call behavior when phone is locked
+    On Android, Linking.openURL('tel:108') from a foreground service on a locked
+    screen requires the CALL_PHONE permission AND may show a confirmation dialog
+    on some OEM ROMs (Samsung One UI, Xiaomi MIUI). Test on the top 5 OEM ROMs
+    used in the Indian market. May need native intent with FLAG_ACTIVITY_NEW_TASK.
+
+Q4. BLE Advertising on Android 12+ background restriction
+    Android 12 added stricter BLE advertising limits from background.
+    Confirm that advertising from within the foreground service context
+    (not a background service) bypasses this restriction.
+    If not: advertising must be initiated from the foreground service notification
+    action, which keeps it technically in foreground scope.
+
+Q5. Calibration accuracy for pocket vs hand carry
+    The calibration phase infers carry posture from pitch/roll distribution.
+    Many elderly users switch between carrying modes (pocket in morning,
+    hand in market). Consider: detect carry posture in real-time and apply
+    the appropriate threshold set dynamically per-session rather than using
+    a single calibrated posture.
+
+Q6. False alarm rate in specific activities
+    Activities that may produce high false alarm rates for elderly users:
+    - Sitting down hard on a chair (impact + orientation change)
+    - Lying down on a bed deliberately (slow orientation change, no real impact)
+    - Getting into/out of a car (orientation change + possible impact)
+    - Doing puja/bending down repeatedly (orientation change cycles)
+    Each of these should be tested explicitly in Phase 7 with elderly participants
+    and, if needed, added as suppression patterns in the false alarm gate.
+```
