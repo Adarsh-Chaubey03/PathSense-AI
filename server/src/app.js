@@ -4,6 +4,7 @@ import helmet from "helmet";
 import morgan from "morgan";
 import contactsRouter from "./routes/contacts.js";
 import fallRoutes from "./routes/fallRoutes.ts";
+import fallDetectRoutes from "./routes/fall.routes.js";
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use("/api/contacts", contactsRouter);
 
 // Fall detection routes
 app.use("/api", fallRoutes);
+app.use("/api", fallDetectRoutes);
 
 app.use((req, res) => {
   res.status(404).json({

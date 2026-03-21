@@ -1,0 +1,106 @@
+{
+  "config": {
+    "data_dir": "D:\\coderonin\\fault_detection_model\\SisFall_dataset",
+    "output_dir": "D:\\coderonin\\fault_detection_model\\outputs",
+    "raw_hz": 200,
+    "target_hz": 50,
+    "window_seconds": 2.0,
+    "overlap": 0.5,
+    "window_size": 100,
+    "stride": 50,
+    "batch_size": 64,
+    "epochs": 50,
+    "learning_rate": 0.001,
+    "seed": 42
+  },
+  "subject_split": {
+    "train": [
+      "SA07",
+      "SA17",
+      "SE09",
+      "SE15",
+      "SA12",
+      "SA14",
+      "SE04",
+      "SE03",
+      "SE01",
+      "SA11",
+      "SE07",
+      "SA22",
+      "SE05",
+      "SA13",
+      "SE02",
+      "SA16",
+      "SA23",
+      "SE12",
+      "SA02",
+      "SE13",
+      "SA20",
+      "SA03",
+      "SA15",
+      "SA10",
+      "SA18",
+      "SA06"
+    ],
+    "val": [
+      "SA19",
+      "SE06",
+      "SA08",
+      "SE08",
+      "SA05"
+    ],
+    "test": [
+      "SE10",
+      "SA21",
+      "SE14",
+      "SA01",
+      "SA09",
+      "SA04",
+      "SE11"
+    ],
+    "train_count": 26,
+    "val_count": 5,
+    "test_count": 7
+  },
+  "window_counts": {
+    "train": 50272,
+    "train_fall": 16684,
+    "train_non_fall": 33588,
+    "val": 10929,
+    "val_fall": 4176,
+    "val_non_fall": 6753,
+    "test": 12551,
+    "test_fall": 4190,
+    "test_non_fall": 8361
+  },
+  "training": {
+    "best_epoch": 9,
+    "best_val_recall": 0.9741379310344828,
+    "best_threshold": 0.01,
+    "total_epochs": 19
+  },
+  "test_results": {
+    "threshold": 0.01,
+    "accuracy": 0.6652059596844873,
+    "precision": 0.4992718446601942,
+    "recall": 0.9818615751789976,
+    "f1": 0.6619469026548672,
+    "roc_auc": 0.9492327715421554,
+    "confusion_matrix": [
+      [
+        4235,
+        4126
+      ],
+      [
+        76,
+        4114
+      ]
+    ]
+  },
+  "targets_met": {
+    "recall_target": 0.97,
+    "recall_met": true,
+    "accuracy_target": 0.9,
+    "accuracy_met": false
+  }
+}

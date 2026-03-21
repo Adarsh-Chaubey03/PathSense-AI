@@ -1,0 +1,53 @@
+False Alarm Filter V2 Metrics Report
+========================================
+Best epoch: 5
+Best threshold: 0.660
+Loss: focal
+Target precision: 0.90
+Minimum recall: 0.80
+Acceptance criteria met: YES
+
+Split Summary
+--------------------
+train_recordings: 1914
+val_recordings: 411
+test_recordings: 411
+train_windows: 34580
+val_windows: 7568
+test_windows: 7225
+train_false_event_windows_base: 278
+train_normal_windows_base: 34302
+train_false_event_windows_final: 641
+train_normal_windows_final: 33939
+val_false_event_windows: 75
+val_normal_windows: 7493
+test_false_event_windows: 68
+test_normal_windows: 7157
+hard_negative_windows: 363
+
+Train
+-----
+accuracy: 0.9890
+precision: 0.8697
+recall: 0.4789
+f1: 0.6177
+roc_auc: 0.9808
+confusion_matrix: [[33893, 46], [334, 307]]
+
+Validation
+----------
+accuracy: 0.9987
+precision: 0.9333
+recall: 0.9333
+f1: 0.9333
+roc_auc: 0.9976
+confusion_matrix: [[7488, 5], [5, 70]]
+
+Test
+----
+accuracy: 0.9985
+precision: 0.9385
+recall: 0.8971
+f1: 0.9173
+roc_auc: 0.9863
+confusion_matrix: [[7153, 4], [7, 61]]

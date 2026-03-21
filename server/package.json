@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "bun --watch src/index.js",
     "dev:node": "nodemon src/index.js",
-    "start": "node src/index.js",
+    "start": "bun src/index.js",
     "start:bun": "bun src/index.js",
     "build": "tsc",
     "dev:ts": "bun --watch src/index.ts"

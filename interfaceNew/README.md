@@ -70,7 +70,70 @@ Key file:
 
 - `src/features/fall-event/detection.ts`
 
-### 5) Backend API integration hardening
+### 5) Edge AI Fall Detection Filter (NEW)
+
+Real-time physics-based filtering on the frontend to minimize unnecessary backend API calls. Only high-confidence fall patterns are escalated.
+
+#### How It Works
+
+The edge filter maintains a **sliding window of 20 sensor samples** (~1 second at 20 Hz) and applies physics-based rules:
+
+```
+Sensor Data → Edge Filter → Window Analysis → Physics Check → Decision
+                              ↓
+                    [20 samples sliding window]
+                              ↓
+                    Compute: min_acc, max_acc, max_gyro
+                              ↓
+                    All 3 conditions met?
+                              ↓
+                    YES → CALL_API (navigate to confirm)
+                    NO  → IGNORE (continue monitoring)
+```
+
+#### Fall Detection Constraints
+
+| Condition | Threshold | Description |
+|-----------|-----------|-------------|
+| **Free Fall** | `min_acc < 0.5g` | Minimum acceleration in window must drop below 0.5g (indicating free fall phase) |
+| **Impact** | `max_acc > 2.5g` | Maximum acceleration must spike above 2.5g (indicating ground impact) |
+| **Rotation** | `max_gyro > 2.5 rad/s` | Maximum gyroscope magnitude must exceed 2.5 rad/s (indicating body rotation) |
+
+**All three conditions must be satisfied simultaneously** within the sliding window to trigger a fall detection.
+
+#### Safety Rules
+
+- **Cooldown:** 3-second cooldown between API calls to prevent duplicate alerts
+- **Stable readings ignored:** Normal ~1g readings are filtered out
+- **Gradual movements ignored:** Walking, sitting, phone handling do not trigger
+- **Spike without drop ignored:** Sudden impact without prior free fall phase is rejected
+
+#### Sensor Data Caching for API
+
+When a fall is detected, the system captures a **2-second window of raw sensor data** for the backend ML model:
+
+```typescript
+interface RawSensorDataPoint {
+  acc_x: number;   // Accelerometer X (m/s²)
+  acc_y: number;   // Accelerometer Y (m/s²)
+  acc_z: number;   // Accelerometer Z (m/s²)
+  gyro_x: number;  // Gyroscope X (rad/s)
+  gyro_y: number;  // Gyroscope Y (rad/s)
+  gyro_z: number;  // Gyroscope Z (rad/s)
+  timestamp: number;
+}
+```
+
+This data is sent to the backend via `sensorWindow` field in the API payload for ML model inference.
+
+#### Key Files
+
+- `src/features/fall-event/edge-filter.ts` - Core edge AI filter logic
+- `src/features/fall-event/detection.ts` - Detection interface
+- `src/services/sensors/sensor-window-store.ts` - 2-second raw data cache
+- `app/monitoring.tsx` - Real-time monitoring with edge filter
+
+### 6) Backend API integration hardening
 
 - Confirm flow submits full telemetry payload + recent snapshot window to backend.
 - API client now enforces a 15-second timeout.
@@ -133,21 +196,31 @@ Key files:
 - Add measured threshold values after calibration.
 - Add final “demo run checklist” with expected outcomes/screens.
 
-### 4) Frontend pre-filter + local safe-pattern memory (pending)
+### 4) Frontend pre-filter + local safe-pattern memory (DONE ✓)
 
-- Add an additional frontend filtering gate before calling the backend fall API.
-- Use actual runtime metrics already produced by the sensor pipeline:
-  - `motionScore`
-  - `accelMagnitude`
-  - `gyroMagnitude`
-  - `motionState`
-  - `orientationChange`
-  - recent snapshot window patterns (not only the latest sample)
-- Define a two-stage frontend gate:
-  - **Stage A (safe reject):** suppress backend call for clearly safe profiles (for example pocket idle, stable bed/table placement, high-rotation shake without impact).
-  - **Stage B (possible fall):** only call backend when impact + orientation + motion pattern indicates a genuine fall candidate.
-- Add local comparison against pre-saved "known safe" events:
-  - When user confirms they were okay after a suspected fall, persist a compact local signature from that snapshot (derived metrics + temporal shape).
+- ✅ Added edge AI filter with sliding window analysis (20 samples)
+- ✅ Physics-based detection: free fall (<0.5g) + impact (>2.5g) + rotation (>2.5 rad/s)
+- ✅ 3-second cooldown between API calls
+- ✅ Real-time filtering on monitoring screen
+- ⏳ Local comparison against pre-saved “known safe” events (future enhancement)
+
+### 5) Sensor data caching for API calls (DONE ✓)
+
+- ✅ Store accelerometer readings (acc_x, acc_y, acc_z) in memory cache
+- ✅ Store gyroscope readings (gyro_x, gyro_y, gyro_z) in memory cache
+- ✅ Maintain 2-second sliding window of raw sensor data
+- ✅ Auto-expire old samples (>2 seconds)
+- ✅ Send cached sensor window with fall event API payload
+- ✅ Backend receives `sensorWindow.samples[]` for ML model input
+
+Key files:
+- `src/services/sensors/sensor-window-store.ts` - In-memory sensor cache
+- `src/services/api/fall-events.ts` - API payload with sensorWindow field
+
+### 6) Future enhancements (pending)
+
+- Add local comparison against pre-saved “known safe” events:
+  - When user confirms they were okay after a suspected fall, persist a compact local signature.
   - On future candidates, compare current snapshot signature against locally stored safe signatures.
   - If similarity is high, suppress API call and continue monitoring.
 - Add explicit suppression reason logging for each filtered candidate:

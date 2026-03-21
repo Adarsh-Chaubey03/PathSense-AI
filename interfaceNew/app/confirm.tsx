@@ -9,9 +9,6 @@ import { CountdownTimer } from "@/src/components/common/CountdownTimer";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
 import { playConfirmationPromptHaptic } from "@/src/services/feedback/haptics";
 import { speakConfirmationPrompt } from "@/src/services/feedback/voice";
-import { postFallEvent } from "@/src/services/api/fall-events";
-import { evaluateCandidate } from "@/src/features/fall-event/detection";
-import { services } from "@/src/services";
 import {
   getFallEvent,
   resetFallEvent,
@@ -22,10 +19,10 @@ import { useFallEvent } from "@/src/state/use-fall-event";
 export default function ConfirmScreen() {
   const router = useRouter();
   const event = useFallEvent();
-  const [secondsLeft, setSecondsLeft] = useState(15);
+  const [secondsLeft, setSecondsLeft] = useState(10);
   const [isEscalating, setIsEscalating] = useState(false);
   const [backendStatus, setBackendStatus] = useState(
-    "Awaiting confirmation timeout or user action.",
+    "ML confirmed a potential real fall. Waiting for your response.",
   );
 
   useEffect(() => {
@@ -71,59 +68,7 @@ export default function ConfirmScreen() {
     }
 
     setIsEscalating(true);
-    const sample = services.sensorAdapter.getLatestSample();
-
-    if (!sample) {
-      setBackendStatus(
-        "Sensor sample unavailable. Waiting for live IMU data before escalation.",
-      );
-      setIsEscalating(false);
-      return;
-    }
-
-    const decision = evaluateCandidate(sample);
-
-    if (!decision.shouldEscalateCandidate) {
-      setBackendStatus(decision.reason);
-      transitionFallEvent("FALSE_ALARM", "Filtered by anti-false-positive guard");
-      router.push("./result");
-      setIsEscalating(false);
-      return;
-    }
-
-    setBackendStatus("Submitting fall-event payload to backend...");
-
-    try {
-      const snapshot = services.sensorAdapter.getRecentSamples(6000, 180);
-      const result = await postFallEvent({
-        eventId: `${sample.timestampMs}-${Math.random().toString(36).slice(2, 8)}`,
-        timestampMs: sample.timestampMs,
-        motionState: sample.motionState,
-        accelerometer: sample.accelerometer,
-        gyroscope: sample.gyroscope,
-        accelMagnitude: sample.accelMagnitude,
-        gyroMagnitude: sample.gyroMagnitude,
-        sampleRateHz: sample.sampleRateHz,
-        source: sample.source,
-        snapshot,
-        motionScore: sample.motionScore,
-        orientationChange: sample.orientationChange,
-      });
-
-      setBackendStatus(`Backend decision: ${result.status}`);
-
-      if (result.status === "REJECTED") {
-        transitionFallEvent("FALSE_ALARM", "Backend rejected fall candidate");
-        router.push("./result");
-        setIsEscalating(false);
-        return;
-      }
-    } catch {
-      // Keep local escalation flow alive even when API is unavailable.
-      setBackendStatus(
-        "Backend unavailable. Continuing with local emergency escalation.",
-      );
-    }
+    setBackendStatus("No user response. Triggering emergency flow...");
 
     if (getFallEvent().state === "CONFIRMING") {
       transitionFallEvent("ALERTING", "No confirmation response");

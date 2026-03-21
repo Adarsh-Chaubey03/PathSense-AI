@@ -1,8 +1,17 @@
 import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
+import {
+  edgeFallFilter,
+  type EdgeFilterResult,
+  type WindowStats,
+  type RawSensorDataPoint,
+} from "./edge-filter";
 
 export interface DetectionDecision {
   shouldEscalateCandidate: boolean;
   reason: string;
+  edgeDecision?: "CALL_API" | "IGNORE";
+  windowStats?: WindowStats;
+  sensorData?: RawSensorDataPoint[];
 }
 
 const FALL_MOTION_THRESHOLD = 0.22;
@@ -67,4 +76,40 @@ export function evaluateCandidate(sample: SensorSample | null): DetectionDecisio
     shouldEscalateCandidate: true,
     reason: "Impact + orientation change profile is consistent with a possible fall.",
   };
+}
+
+/**
+ * Primary fall detection using edge AI filter with sliding window analysis.
+ */
+export function evaluateWithEdgeFilter(sample: SensorSample): DetectionDecision {
+  const edgeResult: EdgeFilterResult = edgeFallFilter.evaluate(sample);
+
+  return {
+    shouldEscalateCandidate: edgeResult.decision === "CALL_API",
+    reason: edgeResult.reason,
+    edgeDecision: edgeResult.decision,
+    windowStats: edgeResult.windowStats,
+    sensorData: edgeResult.sensorData,
+  };
+}
+
+/**
+ * Reset the edge filter
+ */
+export function resetEdgeFilter(): void {
+  edgeFallFilter.reset();
+}
+
+/**
+ * Check if edge filter is in cooldown period
+ */
+export function isEdgeFilterInCooldown(): boolean {
+  return edgeFallFilter.isInCooldown();
+}
+
+/**
+ * Get remaining cooldown time in milliseconds
+ */
+export function getEdgeFilterCooldownMs(): number {
+  return edgeFallFilter.getCooldownRemainingMs();
 }
