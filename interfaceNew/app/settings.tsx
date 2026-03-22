@@ -24,6 +24,8 @@ export default function SettingsScreen() {
   const primaryLight = useThemeColor({}, "primaryLight");
   const secondaryLight = useThemeColor({}, "secondaryLight");
   const accentColor = useThemeColor({}, "accent");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   useEffect(() => {
     const loadContacts = async (): Promise<void> => {
@@ -61,6 +63,9 @@ export default function SettingsScreen() {
         {/* Header */}
         <View style={styles.header}>
           <ThemedText type="title">Settings</ThemedText>
+          <ThemedText type="caption" style={styles.subtitle}>
+            Configure safety contacts and notification preferences.
+          </ThemedText>
         </View>
 
         {/* Profile Card */}
@@ -69,7 +74,12 @@ export default function SettingsScreen() {
             <ThemedText style={styles.avatarText}>PS</ThemedText>
           </View>
           <ThemedText type="subtitle">PathSense User</ThemedText>
-          <ThemedText type="caption">Fall detection enabled</ThemedText>
+          <ThemedText
+            type="caption"
+            style={[styles.profileMeta, { color: textSecondary }]}
+          >
+            Fall detection engine enabled
+          </ThemedText>
         </Card>
 
         {/* Emergency Contacts Section */}
@@ -89,7 +99,10 @@ export default function SettingsScreen() {
                   key={`${contact.name}-${contact.phone}`}
                   style={[
                     styles.contactItem,
-                    index < contacts.length - 1 && styles.contactItemBorder,
+                    index < contacts.length - 1 && [
+                      styles.contactItemBorder,
+                      { borderBottomColor: borderColor },
+                    ],
                   ]}
                 >
                   <View
@@ -106,7 +119,9 @@ export default function SettingsScreen() {
                     <ThemedText type="defaultSemiBold">
                       {contact.name}
                     </ThemedText>
-                    <ThemedText type="caption">{contact.phone}</ThemedText>
+                    <ThemedText type="caption" style={{ color: textSecondary }}>
+                      {contact.phone}
+                    </ThemedText>
                   </View>
                 </View>
               ))
@@ -118,7 +133,10 @@ export default function SettingsScreen() {
               </View>
             )}
           </Card>
-          <ThemedText type="caption" style={styles.statusText}>
+          <ThemedText
+            type="caption"
+            style={[styles.statusText, { color: textSecondary }]}
+          >
             {status}
           </ThemedText>
         </View>
@@ -126,16 +144,16 @@ export default function SettingsScreen() {
         {/* Notifications Section */}
         <View style={styles.section}>
           <ThemedText type="label" style={styles.sectionLabel}>
-            Notifications
+            Notification Mode
           </ThemedText>
           <Card variant="outlined" padding="md">
-            <View style={styles.settingRow}>
+            <View
+              style={[styles.settingRow, { borderBottomColor: borderColor }]}
+            >
               <View style={styles.settingInfo}>
-                <ThemedText type="defaultSemiBold">
-                  Push Notifications
-                </ThemedText>
-                <ThemedText type="caption">
-                  Receive alerts and updates
+                <ThemedText type="defaultSemiBold">Push Alerts</ThemedText>
+                <ThemedText type="caption" style={{ color: textSecondary }}>
+                  Receive safety events and escalation updates
                 </ThemedText>
               </View>
               <View style={[styles.toggleOn, { backgroundColor: accentColor }]}>
@@ -151,13 +169,17 @@ export default function SettingsScreen() {
             About
           </ThemedText>
           <Card variant="outlined" padding="md">
-            <View style={styles.aboutRow}>
+            <View style={[styles.aboutRow, { borderBottomColor: borderColor }]}>
               <ThemedText>Version</ThemedText>
-              <ThemedText type="caption">1.0.0</ThemedText>
+              <ThemedText type="caption" style={{ color: textSecondary }}>
+                1.0.0
+              </ThemedText>
             </View>
             <View style={styles.aboutRow}>
               <ThemedText>ML Model</ThemedText>
-              <ThemedText type="caption">Fall Detection v2</ThemedText>
+              <ThemedText type="caption" style={{ color: textSecondary }}>
+                Fall Detection v2
+              </ThemedText>
             </View>
           </Card>
         </View>
@@ -186,7 +208,12 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   header: {
-    marginBottom: Spacing.sm,
+    gap: Spacing.xs,
+    marginBottom: Spacing.xs,
+  },
+  subtitle: {
+    lineHeight: 20,
+    maxWidth: 320,
   },
   profileCard: {
     alignItems: "center",
@@ -205,6 +232,9 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     color: Palette.white,
+  },
+  profileMeta: {
+    letterSpacing: 0.25,
   },
   section: {
     gap: Spacing.sm,
@@ -225,7 +255,6 @@ const styles = StyleSheet.create({
   },
   contactItemBorder: {
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(155, 143, 228, 0.1)",
   },
   contactAvatar: {
     width: 44,
@@ -252,12 +281,15 @@ const styles = StyleSheet.create({
   },
   statusText: {
     marginLeft: Spacing.sm,
-    opacity: 0.7,
+    opacity: 0.82,
   },
   settingRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderBottomWidth: 1,
+    paddingBottom: Spacing.sm,
+    marginBottom: Spacing.sm,
   },
   settingInfo: {
     flex: 1,
@@ -277,6 +309,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
   },
   backButton: {
     marginTop: Spacing.md,

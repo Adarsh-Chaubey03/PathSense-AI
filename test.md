@@ -111,10 +111,10 @@ The following must be declared clearly:
 
 - **Agent Name / Platform**:
 - **Capabilities Used**:
-  - [ ] Code generation
+  - [x] Code generation
   - [ ] Full app scaffolding
   - [ ] Decision making
-  - [x] Autonomous workflows
+  - [ ] Autonomous workflows
 - **Human Intervention Level**:
   - [x] High (manual design & logic)
   - [ ] Medium
