@@ -156,8 +156,19 @@ Failure to justify usage may impact **innovation and originality scores**.
 Briefly explain:
 
 - What parts were **designed and implemented by humans**
+  - The overall architecture, the techniques and the overall high level flow of which routes need to be created and what there roles need to be, and which permissions are required, along with that, we generated thousands of lines of actual data with real life simulated falls
+
 - What parts were **assisted by AI**
+  - The internal routing design and folder structure, and caching reccomendations and implementation
+  - Generation of Yaml files, UI implementation, Not planning and design.
+
 - What makes your solution **unique**
+  - Extensive dataset, which we tried and tested and trained our model on, with practice falls, stability test
+  - Depth, Gyro, and future implementation of Wifi signals for 3D overview of the entire room, research on this exists and is being worked on right now.
+  - SOS signalling to nearby devices, based on bluetooth
+  - Voice response, Triple clicking the sound down button is enough to signal that the user is safe
+  - Cache based storage for specific false flags from the user, to ensure that similar values dont result in false flags again.
+   
 
 ---
 
