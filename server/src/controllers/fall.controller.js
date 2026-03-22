@@ -59,8 +59,14 @@ const PYTHON_BIN = resolvePythonBin();
 const INFERENCE_TIMEOUT_MS = Number(
   process.env.FALL_DETECT_TIMEOUT_MS || 15000,
 );
+const FALL_GATE_MIN = Number(process.env.FALL_GATE_MIN || 0.15);
+const REAL_FALL_MIN = Number(process.env.REAL_FALL_MIN || 0.55);
+const FALSE_GATE_MIN = Number(process.env.FALSE_GATE_MIN || 0.76);
 
 console.log(`[FallDetect] Python runtime: ${PYTHON_BIN}`);
+console.log(
+  `[FallDetect] Thresholds: FALL_GATE_MIN=${FALL_GATE_MIN}, REAL_FALL_MIN=${REAL_FALL_MIN}, FALSE_GATE_MIN=${FALSE_GATE_MIN}`,
+);
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);
@@ -270,6 +276,7 @@ class PythonFallBridge {
     pendingRequest.resolve({
       fall_prob: Number(parsed.fall_prob),
       false_prob: Number(parsed.false_prob),
+      decision_reason: parsed.decision_reason,
       result: parsed.result,
     });
   }
@@ -365,13 +372,22 @@ export async function detectFall(req, res) {
       throw new Error("Invalid inference response from ML worker");
     }
 
+    const decisionReason =
+      typeof prediction.decision_reason === "string"
+        ? prediction.decision_reason
+        : "UNSPECIFIED";
+
     console.log(
       "[FallDetect] SUCCESS - Result:",
       prediction.result,
+      "| Reason:",
+      decisionReason,
       "| Fall prob:",
       (prediction.fall_prob * 100).toFixed(1) + "%",
       "| False prob:",
       (prediction.false_prob * 100).toFixed(1) + "%",
+      "| Gates:",
+      `fall>=${FALL_GATE_MIN}, real>=${REAL_FALL_MIN}, false>=${FALSE_GATE_MIN}`,
     );
 
     res.status(200).json(prediction);

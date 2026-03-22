@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -159,6 +160,23 @@ def _normalize(features: np.ndarray, mean: np.ndarray, std: np.ndarray) -> np.nd
 	return (features - mean_slice) / std_slice
 
 
+def _env_float_0_1(name: str, fallback: float) -> float:
+	value = os.getenv(name)
+	if value is None or value.strip() == "":
+		return fallback
+
+	try:
+		parsed = float(value)
+	except ValueError:
+		return fallback
+
+	if parsed < 0.0:
+		return 0.0
+	if parsed > 1.0:
+		return 1.0
+	return parsed
+
+
 class InferenceEngine:
 	def __init__(
 		self,
@@ -166,8 +184,9 @@ class InferenceEngine:
 		model2_path: Path,
 		norm_mean_path: Path,
 		norm_std_path: Path,
-		threshold1_default: float = 0.03,
-		threshold2_default: float = 0.66,
+		fall_gate_default: float = 0.15,
+		real_fall_min_default: float = 0.55,
+		false_gate_default: float = 0.76,
 	) -> None:
 		self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -206,16 +225,12 @@ class InferenceEngine:
 		self.model2.to(self.device)
 		self.model2.eval()
 
-		self.threshold1 = (
-			float(ckpt1.get("threshold", threshold1_default))
-			if isinstance(ckpt1, dict)
-			else threshold1_default
-		)
-		self.threshold2 = (
-			float(ckpt2.get("threshold", threshold2_default))
-			if isinstance(ckpt2, dict)
-			else threshold2_default
-		)
+		self.fall_gate_min = _env_float_0_1("FALL_GATE_MIN", fall_gate_default)
+		self.real_fall_min = _env_float_0_1("REAL_FALL_MIN", real_fall_min_default)
+		self.false_gate_min = _env_float_0_1("FALSE_GATE_MIN", false_gate_default)
+
+		if self.real_fall_min < self.fall_gate_min:
+			self.real_fall_min = self.fall_gate_min
 
 		self.norm_mean = np.load(norm_mean_path).astype(np.float32)
 		self.norm_std = np.load(norm_std_path).astype(np.float32)
@@ -241,20 +256,31 @@ class InferenceEngine:
 		with torch.no_grad():
 			fall_prob = float(torch.sigmoid(self.model1(x1)).item())
 
-		if fall_prob < self.threshold1:
+		if fall_prob < self.fall_gate_min:
 			return {
 				"fall_prob": round(fall_prob, 6),
 				"false_prob": 0.0,
+				"decision_reason": "NO_FALL_LOW_FALL_PROB",
 				"result": "NO_FALL",
 			}
 
 		with torch.no_grad():
 			false_prob = float(torch.sigmoid(self.model2(x2)).item())
 
-		result = "FALSE_ALARM" if false_prob >= self.threshold2 else "REAL_FALL"
+		if false_prob >= self.false_gate_min:
+			result = "FALSE_ALARM"
+			decision_reason = "FALSE_ALARM_HIGH_FALSE_PROB"
+		elif fall_prob >= self.real_fall_min:
+			result = "REAL_FALL"
+			decision_reason = "REAL_FALL_CONFIRMED"
+		else:
+			result = "NO_FALL"
+			decision_reason = "NO_FALL_BORDERLINE"
+
 		return {
 			"fall_prob": round(fall_prob, 6),
 			"false_prob": round(false_prob, 6),
+			"decision_reason": decision_reason,
 			"result": result,
 		}
 
