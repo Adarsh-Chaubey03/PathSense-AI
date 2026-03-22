@@ -112,5 +112,5 @@ pip install -r requirements-gpu.txt
 ## Team Info
 
 - Team: Ved Vahini
-- Members: Adarsh Chaubey, Sakshi Gupta, Aditya Laxkar, Abhinav Patra
+- Members: Adarsh Chaubey(Lead), Sakshi Gupta, Aditya Laxkar, Abhinav Patra
 - Track: Problem Statement 5
