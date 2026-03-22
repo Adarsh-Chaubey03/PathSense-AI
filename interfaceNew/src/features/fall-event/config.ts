@@ -1,0 +1,1 @@
+export const CONFIRMATION_TIMEOUT_SECONDS = 10;
