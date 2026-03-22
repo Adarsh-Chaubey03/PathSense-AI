@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
 import { StyleSheet, TouchableOpacity, View } from "react-native";
 
@@ -29,6 +29,7 @@ export default function ConfirmScreen() {
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
   const [isEscalating, setIsEscalating] = useState(false);
   const [mlData, setMlData] = useState<MLDetectionData | undefined>(undefined);
+  const safeConfirmedRef = useRef(false);
 
   useEffect(() => {
     // Get ML detection result from store
@@ -84,12 +85,20 @@ export default function ConfirmScreen() {
   };
 
   const handleImOk = useCallback(async (): Promise<void> => {
-    if (mlData?.safeSignalKey) {
-      await cacheSafeSignalKey(mlData.safeSignalKey);
+    if (safeConfirmedRef.current) {
+      return;
     }
+
+    safeConfirmedRef.current = true;
 
     if (getFallEvent().state === "CONFIRMING") {
       transitionFallEvent("FALSE_ALARM", "User confirmed safety");
+    }
+
+    setSecondsLeft(0);
+
+    if (mlData?.safeSignalKey) {
+      void cacheSafeSignalKey(mlData.safeSignalKey);
     }
 
     // Clear ML detection data
@@ -99,7 +108,7 @@ export default function ConfirmScreen() {
   }, [mlData?.safeSignalKey, router]);
 
   const handleEscalate = useCallback(async (): Promise<void> => {
-    if (isEscalating) {
+    if (isEscalating || safeConfirmedRef.current) {
       return;
     }
 
@@ -117,6 +126,10 @@ export default function ConfirmScreen() {
   }, [isEscalating, router]);
 
   useEffect(() => {
+    if (safeConfirmedRef.current) {
+      return;
+    }
+
     if (secondsLeft <= 0) {
       void handleEscalate();
       return;
