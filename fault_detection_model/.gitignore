@@ -7,3 +7,4 @@ checkpoints/
 runs/
 /sisFall_dataset/
 *.csv
+data/
