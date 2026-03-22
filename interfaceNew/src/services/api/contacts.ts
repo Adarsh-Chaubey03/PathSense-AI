@@ -11,6 +11,14 @@ export interface ContactAlertResponse {
   recipients: (EmergencyContact & { status: "sent" | "failed"; error?: string })[];
 }
 
+export interface ContactCallResponse {
+  message: string;
+  success: boolean;
+  recipient: EmergencyContact;
+  callSid?: string;
+  error?: string;
+}
+
 export async function fetchContacts(): Promise<EmergencyContact[]> {
   return apiRequest<EmergencyContact[]>("/contacts", { method: "GET" });
 }
@@ -37,5 +45,16 @@ export async function sendEmergencyAlert(
   return apiRequest<ContactAlertResponse>("/contacts/alert", {
     method: "POST",
     body: JSON.stringify({ message }),
+  });
+}
+
+export async function placeEmergencyCall(
+  spokenMessage?: string,
+): Promise<ContactCallResponse> {
+  return apiRequest<ContactCallResponse>("/contacts/call", {
+    method: "POST",
+    body: JSON.stringify(
+      spokenMessage ? { spokenMessage } : {},
+    ),
   });
 }

@@ -2,7 +2,10 @@ import express from "express";
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { send_alert_to_contacts } from "../services/contactManager.ts";
+import {
+  ring_emergency_friend_on_timeout,
+  send_alert_to_contacts,
+} from "../services/contactManager.ts";
 
 const router = express.Router();
 
@@ -98,6 +101,38 @@ router.post("/alert", async (req, res) => {
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({
       message: "Failed to send alerts",
+      success: false,
+      error: message,
+    });
+  }
+});
+
+// POST /api/contacts/call - Place emergency call to configured target
+router.post("/call", async (req, res) => {
+  try {
+    const spokenMessage =
+      typeof req.body?.spokenMessage === "string" && req.body.spokenMessage.trim().length > 0
+        ? req.body.spokenMessage.trim()
+        : undefined;
+
+    const result = await ring_emergency_friend_on_timeout(spokenMessage);
+
+    res.json({
+      message: result.callResult.success
+        ? "Emergency call placed"
+        : "Emergency call failed",
+      success: result.callResult.success,
+      recipient: {
+        name: result.contact.name,
+        phone: result.contact.phone,
+      },
+      callSid: result.callResult.callSid,
+      error: result.callResult.error,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({
+      message: "Failed to place emergency call",
       success: false,
       error: message,
     });

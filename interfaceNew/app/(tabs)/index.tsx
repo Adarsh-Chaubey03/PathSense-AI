@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { useRouter } from "expo-router";
 import { StyleSheet, View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -16,10 +17,16 @@ import {
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const navigatingRef = useRef(false);
   const primaryLight = useThemeColor({}, "primaryLight");
   const accentLight = useThemeColor({}, "accentLight");
 
   const handleStartMonitoring = (): void => {
+    if (navigatingRef.current) {
+      return;
+    }
+    navigatingRef.current = true;
+
     if (getFallEvent().state === "IDLE") {
       transitionFallEvent("MONITORING", "Monitoring started from home");
     }
@@ -31,7 +38,12 @@ export default function HomeScreen() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView
+      style={styles.container}
+      onTouchStart={() => {
+        handleStartMonitoring();
+      }}
+    >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[

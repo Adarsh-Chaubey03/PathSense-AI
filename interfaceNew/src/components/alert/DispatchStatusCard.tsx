@@ -24,12 +24,20 @@ export function DispatchStatusCard({
   const successLight = useThemeColor({}, "successLight");
   const successColor = useThemeColor({}, "success");
   const cardBg = useThemeColor({}, "card");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   const bgColor = success ? successLight : dangerLight;
   const accentColor = success ? successColor : danger;
 
   return (
-    <View style={[styles.card, { backgroundColor: cardBg }, Shadows.md]}>
+    <View
+      style={[
+        styles.card,
+        { backgroundColor: cardBg, borderColor },
+        Shadows.md,
+      ]}
+    >
       <View style={[styles.accentTop, { backgroundColor: accentColor }]} />
       <View style={styles.content}>
         <View style={[styles.iconCircle, { backgroundColor: bgColor }]}>
@@ -43,9 +51,12 @@ export function DispatchStatusCard({
         </View>
         <View style={styles.textContainer}>
           <ThemedText type="subtitle" style={styles.title}>
-            {success ? "Alert Sent" : "Emergency Active"}
+            {success ? "Dispatch Confirmed" : "Emergency Active"}
           </ThemedText>
-          <ThemedText type="caption" style={styles.message}>
+          <ThemedText
+            type="caption"
+            style={[styles.message, { color: textSecondary }]}
+          >
             {message}
           </ThemedText>
         </View>
@@ -58,9 +69,10 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: BorderRadius.lg,
     overflow: "hidden",
+    borderWidth: 1,
   },
   accentTop: {
-    height: 4,
+    height: 3,
   },
   content: {
     padding: Spacing.lg,
@@ -69,11 +81,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   iconCircle: {
-    width: 48,
-    height: 48,
+    width: 50,
+    height: 50,
     borderRadius: BorderRadius.full,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(244, 240, 232, 0.22)",
   },
   icon: {
     fontSize: 20,
