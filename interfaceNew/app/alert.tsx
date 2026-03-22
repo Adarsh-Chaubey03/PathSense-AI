@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { StyleSheet, TouchableOpacity } from "react-native";
+import { StyleSheet, View, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { Card, Button } from "@/components/ui";
 import { DispatchStatusCard } from "@/src/components/alert/DispatchStatusCard";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { Spacing, Palette } from "@/constants/theme";
 import { sendEmergencyAlert } from "@/src/services/api/contacts";
 import { playEmergencyHaptic } from "@/src/services/feedback/haptics";
 import { speakEmergencyPrompt } from "@/src/services/feedback/voice";
@@ -19,12 +23,16 @@ import { useFallEvent } from "@/src/state/use-fall-event";
 
 export default function AlertScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const event = useFallEvent();
   const [isDispatching, setIsDispatching] = useState(false);
   const [hasDispatched, setHasDispatched] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState(
     "Preparing SOS payload and notifying contacts.",
   );
+
+  const dangerColor = useThemeColor({}, "danger");
+  const dangerLight = useThemeColor({}, "dangerLight");
 
   useEffect(() => {
     if (getFallEvent().state === "IDLE") {
@@ -106,22 +114,91 @@ export default function AlertScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Alert Dispatch</ThemedText>
-      <DispatchStatusCard message={dispatchMessage} />
-      <StatusBadge state={event.state} />
-      <TouchableOpacity
-        onPress={() => void handleDispatched()}
-        style={styles.link}
-        disabled={isDispatching}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + Spacing.xl,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
       >
-        <ThemedText type="link">
-          {isDispatching
-            ? "Dispatching..."
-            : hasDispatched
-              ? "Continue to result"
-              : "Mark as dispatched"}
+        {/* Emergency Header */}
+        <View style={styles.header}>
+          <View
+            style={[styles.alertIconOuter, { backgroundColor: dangerLight }]}
+          >
+            <View
+              style={[styles.alertIconInner, { backgroundColor: dangerColor }]}
+            >
+              <ThemedText style={styles.alertIcon}>!</ThemedText>
+            </View>
+          </View>
+          <ThemedText
+            type="hero"
+            style={[styles.title, { color: dangerColor }]}
+          >
+            Emergency Alert
+          </ThemedText>
+          <ThemedText type="caption" style={styles.subtitle}>
+            Dispatching SOS to your emergency contacts
+          </ThemedText>
+        </View>
+
+        {/* Dispatch Status Card */}
+        <DispatchStatusCard
+          message={dispatchMessage}
+          isLoading={isDispatching}
+          success={hasDispatched}
+        />
+
+        {/* Status Badge */}
+        <View style={styles.statusRow}>
+          <StatusBadge state={event.state} />
+        </View>
+
+        {/* Location Info */}
+        <Card variant="outlined" padding="md">
+          <ThemedText type="label" style={styles.sectionLabel}>
+            Location Status
+          </ThemedText>
+          <ThemedText type="caption">
+            {isDispatching
+              ? "Acquiring GPS coordinates..."
+              : hasDispatched
+                ? "Location data included in alert"
+                : "Location will be shared with emergency contacts"}
+          </ThemedText>
+        </Card>
+
+        {/* Action Button */}
+        <View style={styles.buttonsContainer}>
+          <Button
+            title={
+              isDispatching
+                ? "Dispatching..."
+                : hasDispatched
+                  ? "Continue"
+                  : "Send Emergency Alert"
+            }
+            variant={hasDispatched ? "primary" : "danger"}
+            size="lg"
+            fullWidth
+            onPress={() => void handleDispatched()}
+            disabled={isDispatching}
+            loading={isDispatching}
+          />
+        </View>
+
+        {/* Info Text */}
+        <ThemedText type="caption" style={styles.infoText}>
+          {hasDispatched
+            ? "Your emergency contacts have been notified. Help is on the way."
+            : "Tap the button above to send an emergency alert with your location to all configured contacts."}
         </ThemedText>
-      </TouchableOpacity>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -129,14 +206,56 @@ export default function AlertScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  header: {
+    alignItems: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.lg,
+  },
+  alertIconOuter: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    alignItems: "center",
     justifyContent: "center",
-    gap: 12,
   },
-  body: {
-    lineHeight: 22,
+  alertIconInner: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  link: {
-    marginTop: 8,
+  alertIcon: {
+    fontSize: 32,
+    fontWeight: "700",
+    color: Palette.white,
+  },
+  title: {
+    textAlign: "center",
+  },
+  subtitle: {
+    textAlign: "center",
+  },
+  statusRow: {
+    alignItems: "center",
+  },
+  sectionLabel: {
+    marginBottom: Spacing.sm,
+  },
+  buttonsContainer: {
+    paddingTop: Spacing.md,
+  },
+  infoText: {
+    textAlign: "center",
+    opacity: 0.7,
+    paddingHorizontal: Spacing.lg,
   },
 });

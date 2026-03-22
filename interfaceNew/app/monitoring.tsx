@@ -1,9 +1,13 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, TouchableOpacity } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { Button, Card } from "@/components/ui";
+import { BorderRadius, Spacing } from "@/constants/theme";
+import { useThemeColor } from "@/hooks/use-theme-color";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
 import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
 import { services } from "@/src/services";
@@ -51,6 +55,7 @@ function isValidProbability(value: unknown): value is number {
 
 export default function MonitoringScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const event = useFallEvent();
   const [sample, setSample] = useState<SensorSample | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<DetectionDecision | null>(null);
@@ -58,6 +63,15 @@ export default function MonitoringScreen() {
   const [apiStatus, setApiStatus] = useState<string | null>(null);
   const [monitoringLogs, setMonitoringLogs] = useState<string[]>([]);
   const apiBaseUrl = getApiBaseUrl();
+
+  const primaryColor = useThemeColor({}, "primary");
+  const successColor = useThemeColor({}, "success");
+  const warningColor = useThemeColor({}, "warning");
+  const dangerColor = useThemeColor({}, "danger");
+  const accentColor = useThemeColor({}, "accent");
+  const cardAlt = useThemeColor({}, "cardAlt");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   // Prevent concurrent API calls
   const isProcessingRef = useRef(false);
@@ -393,64 +407,158 @@ export default function MonitoringScreen() {
     router.push("./confirm");
   };
 
+  const isApiHealthy = apiStatus && !apiStatus.toLowerCase().includes("error");
+
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Monitoring</ThemedText>
-      <ThemedText style={styles.body}>
-        Continuous monitoring is active.
-      </ThemedText>
-      <ThemedText style={styles.apiBaseStatus}>
-        API Base: {apiBaseUrl}
-      </ThemedText>
-      <StatusBadge state={event.state} />
-      <ThemedText style={styles.body}>
-        Sensor sample:{" "}
-        {sample
-          ? `motion ${sample.motionScore.toFixed(2)} | accel ${sample.accelMagnitude.toFixed(2)} m/s² | gyro ${sample.gyroMagnitude.toFixed(2)} rad/s | ${sample.motionState}`
-          : "waiting..."}
-      </ThemedText>
-      <ThemedText style={styles.bufferStatus}>
-        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()} raw →{" "}
-        {sensorWindowStore.getTargetWindowSize()} model samples)
-      </ThemedText>
-      <ThemedText style={styles.edgeStatus}>
-        Edge filter:{" "}
-        {edgeStatus
-          ? `${edgeStatus.edgeDecision} - ${edgeStatus.reason}`
-          : "initializing..."}
-      </ThemedText>
-      {edgeStatus?.windowStats && (
-        <ThemedText style={styles.windowStats}>
-          Window: min={edgeStatus.windowStats.minAccG.toFixed(2)}g | max=
-          {edgeStatus.windowStats.maxAccG.toFixed(2)}g | gyro=
-          {edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s | samples=
-          {edgeStatus.windowStats.sampleCount}
-        </ThemedText>
-      )}
-      {apiStatus && (
-        <ThemedText style={styles.apiStatus}>ML API: {apiStatus}</ThemedText>
-      )}
-      <ThemedText style={styles.logsTitle}>Monitoring logs</ThemedText>
-      {monitoringLogs.length > 0 ? (
-        <ScrollView
-          style={styles.logsContainer}
-          contentContainerStyle={styles.logsContentContainer}
-        >
-          {monitoringLogs
-            .slice()
-            .reverse()
-            .map((line) => (
-              <ThemedText key={line} style={styles.logLine}>
-                {line}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <ThemedText type="hero" style={styles.title}>
+            Live Monitoring
+          </ThemedText>
+          <ThemedText type="caption" style={styles.subtitle}>
+            PathSense continuously analyzes motion and confirms high-risk events.
+          </ThemedText>
+          <StatusBadge state={event.state} />
+        </View>
+
+        <Card variant="glass" padding="lg" style={styles.metricsCard}>
+          <ThemedText type="label">Motion Telemetry</ThemedText>
+          <View style={styles.metricsGrid}>
+            <View style={[styles.metricCell, { borderColor }]}> 
+              <ThemedText type="caption">Motion</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? sample.motionScore.toFixed(2) : "--"}
               </ThemedText>
-            ))}
-        </ScrollView>
-      ) : (
-        <ThemedText style={styles.logLine}>No log events yet.</ThemedText>
-      )}
-      <TouchableOpacity onPress={handleSimulateCandidate} style={styles.link}>
-        <ThemedText type="link">Simulate fall candidate</ThemedText>
-      </TouchableOpacity>
+            </View>
+            <View style={[styles.metricCell, { borderColor }]}> 
+              <ThemedText type="caption">Accel</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? `${sample.accelMagnitude.toFixed(2)} m/s²` : "--"}
+              </ThemedText>
+            </View>
+            <View style={[styles.metricCell, { borderColor }]}> 
+              <ThemedText type="caption">Gyro</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? `${sample.gyroMagnitude.toFixed(2)} rad/s` : "--"}
+              </ThemedText>
+            </View>
+            <View style={[styles.metricCell, { borderColor }]}> 
+              <ThemedText type="caption">State</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? sample.motionState : "waiting"}
+              </ThemedText>
+            </View>
+          </View>
+          <ThemedText style={[styles.apiBaseStatus, { color: textSecondary }]}> 
+            API Base: {apiBaseUrl}
+          </ThemedText>
+        </Card>
+
+        <Card variant="default" padding="lg" style={styles.progressCard}>
+          <View style={styles.rowBetween}>
+            <ThemedText type="label">Buffer Readiness</ThemedText>
+            <ThemedText type="defaultSemiBold">{bufferFill}%</ThemedText>
+          </View>
+          <View style={[styles.progressTrack, { backgroundColor: cardAlt }]}> 
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${bufferFill}%`,
+                  backgroundColor: bufferFill >= 100 ? successColor : primaryColor,
+                },
+              ]}
+            />
+          </View>
+          <ThemedText type="caption">
+            {sensorWindowStore.getSampleCount()} raw samples normalized to{" "}
+            {sensorWindowStore.getTargetWindowSize()} model samples
+          </ThemedText>
+        </Card>
+
+        <Card variant="outlined" padding="md">
+          <ThemedText type="label" style={styles.cardTitle}>
+            Edge Filter
+          </ThemedText>
+          <ThemedText style={styles.statusText}>
+            {edgeStatus
+              ? `${edgeStatus.edgeDecision} • ${edgeStatus.reason}`
+              : "Initializing edge model..."}
+          </ThemedText>
+          {edgeStatus?.windowStats && (
+            <ThemedText type="caption" style={styles.windowStats}>
+              min {edgeStatus.windowStats.minAccG.toFixed(2)}g • max{" "}
+              {edgeStatus.windowStats.maxAccG.toFixed(2)}g • gyro{" "}
+              {edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s • samples{" "}
+              {edgeStatus.windowStats.sampleCount}
+            </ThemedText>
+          )}
+        </Card>
+
+        <Card variant="outlined" padding="md">
+          <ThemedText type="label" style={styles.cardTitle}>
+            ML API Status
+          </ThemedText>
+          <ThemedText
+            style={[
+              styles.statusText,
+              {
+                color: apiStatus
+                  ? isApiHealthy
+                    ? accentColor
+                    : dangerColor
+                  : warningColor,
+              },
+            ]}
+          >
+            {apiStatus ?? "Waiting for edge-filter escalation..."}
+          </ThemedText>
+        </Card>
+
+        <Card variant="glass" padding="md" style={styles.logsCard}>
+          <ThemedText type="label" style={styles.cardTitle}>
+            Activity Feed
+          </ThemedText>
+          {monitoringLogs.length > 0 ? (
+            <ScrollView
+              style={[styles.logsContainer, { borderColor }]}
+              contentContainerStyle={styles.logsContentContainer}
+            >
+              {monitoringLogs
+                .slice()
+                .reverse()
+                .map((line) => (
+                  <ThemedText key={line} style={styles.logLine}>
+                    {line}
+                  </ThemedText>
+                ))}
+            </ScrollView>
+          ) : (
+            <ThemedText type="caption" style={styles.logLine}>
+              No log events yet.
+            </ThemedText>
+          )}
+        </Card>
+
+        <Button
+          title="Simulate fall candidate"
+          variant="outline"
+          size="lg"
+          fullWidth
+          onPress={handleSimulateCandidate}
+        />
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -458,57 +566,83 @@ export default function MonitoringScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    justifyContent: "center",
-    gap: 12,
   },
-  body: {
-    lineHeight: 22,
+  scrollView: {
+    flex: 1,
   },
-  bufferStatus: {
+  content: {
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  header: {
+    gap: Spacing.sm,
+  },
+  title: {
+    lineHeight: 42,
+  },
+  subtitle: {
+    maxWidth: 320,
     lineHeight: 20,
-    fontSize: 12,
-    opacity: 0.9,
-    color: "#4CAF50",
   },
-  edgeStatus: {
-    lineHeight: 20,
-    fontSize: 12,
-    opacity: 0.8,
+  metricsCard: {
+    gap: Spacing.md,
   },
-  windowStats: {
-    lineHeight: 18,
-    fontSize: 11,
-    opacity: 0.6,
-    fontFamily: "monospace",
+  metricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
   },
-  apiStatus: {
-    lineHeight: 20,
-    fontSize: 12,
-    opacity: 0.9,
-    color: "#2196F3",
+  metricCell: {
+    flexGrow: 1,
+    minWidth: 130,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
   },
   apiBaseStatus: {
     lineHeight: 18,
     fontSize: 11,
-    opacity: 0.75,
     fontFamily: "monospace",
   },
-  logsTitle: {
-    marginTop: 8,
-    fontSize: 12,
-    opacity: 0.9,
-    fontWeight: "600",
+  progressCard: {
+    gap: Spacing.sm,
+  },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
+  },
+  progressTrack: {
+    width: "100%",
+    height: 10,
+    borderRadius: BorderRadius.full,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: BorderRadius.full,
+  },
+  cardTitle: {
+    marginBottom: Spacing.xs,
+  },
+  statusText: {
+    lineHeight: 20,
+  },
+  windowStats: {
+    marginTop: Spacing.sm,
+    lineHeight: 18,
+    fontFamily: "monospace",
   },
   logsContainer: {
     maxHeight: 220,
-    padding: 8,
-    borderRadius: 8,
+    borderRadius: BorderRadius.md,
     borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
+    padding: Spacing.sm,
   },
   logsContentContainer: {
-    gap: 4,
+    gap: Spacing.xs,
   },
   logLine: {
     lineHeight: 16,
@@ -516,7 +650,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
     fontFamily: "monospace",
   },
-  link: {
-    marginTop: 12,
+  logsCard: {
+    gap: Spacing.sm,
   },
 });

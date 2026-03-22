@@ -1,5 +1,9 @@
 export type FallStatus = 'CONFIRMED' | 'REJECTED' | 'UNCERTAIN';
 
+export type ResponseType = 'POSITIVE' | 'NEGATIVE' | 'NONE';
+
+export type PriorityDecision = 'CANCEL' | 'CONTACTS' | 'EMERGENCY';
+
 export type MotionState =
   | 'stationary'
   | 'walking'
@@ -40,6 +44,11 @@ export interface FallEventRequest {
   motionScore: number;
   orientationChange: boolean;
   transcript?: string;
+  locationLink?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+  };
 }
 
 export interface FallDispatchSummary {
@@ -47,6 +56,13 @@ export interface FallDispatchSummary {
   success: boolean;
   recipientsTotal: number;
   recipientsSucceeded: number;
+  decision: PriorityDecision;
+  responseType: ResponseType;
+  modelScore: number;
+  responseWeight: number;
+  finalScore: number;
+  ttsMessage: string;
+  smsStatus: 'NOT_SENT' | 'PARTIAL' | 'SENT' | 'FAILED';
 }
 
 export interface FallEventResponse {

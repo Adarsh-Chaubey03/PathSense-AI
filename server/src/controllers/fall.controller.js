@@ -76,6 +76,10 @@ function isPositiveFiniteNumber(value) {
   return isFiniteNumber(value) && value > 0;
 }
 
+function formatNumber(value) {
+  return Number.isFinite(value) ? Number(value).toFixed(4) : "NaN";
+}
+
 function isValidWindow(window) {
   if (!Array.isArray(window) || window.length !== 100) {
     return false;
@@ -352,6 +356,48 @@ export async function detectFall(req, res) {
 
   console.log("[FallDetect] Window validated. First sample:", window[0]);
   console.log("[FallDetect] Last sample:", window[window.length - 1]);
+  const firstSample = window[0];
+  const lastSample = window[window.length - 1];
+  const midSample = window[Math.floor(window.length / 2)];
+
+  console.log("[FallDetect] Sensor window components", {
+    first: {
+      acc: {
+        x: formatNumber(firstSample[0]),
+        y: formatNumber(firstSample[1]),
+        z: formatNumber(firstSample[2]),
+      },
+      gyro: {
+        x: formatNumber(firstSample[3]),
+        y: formatNumber(firstSample[4]),
+        z: formatNumber(firstSample[5]),
+      },
+    },
+    middle: {
+      acc: {
+        x: formatNumber(midSample[0]),
+        y: formatNumber(midSample[1]),
+        z: formatNumber(midSample[2]),
+      },
+      gyro: {
+        x: formatNumber(midSample[3]),
+        y: formatNumber(midSample[4]),
+        z: formatNumber(midSample[5]),
+      },
+    },
+    last: {
+      acc: {
+        x: formatNumber(lastSample[0]),
+        y: formatNumber(lastSample[1]),
+        z: formatNumber(lastSample[2]),
+      },
+      gyro: {
+        x: formatNumber(lastSample[3]),
+        y: formatNumber(lastSample[4]),
+        z: formatNumber(lastSample[5]),
+      },
+    },
+  });
 
   try {
     console.log("[FallDetect] Sending to Python ML worker...");

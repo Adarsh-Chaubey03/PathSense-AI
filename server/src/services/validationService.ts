@@ -98,11 +98,27 @@ async function triggerSOS(): Promise<FallDispatchSummary> {
     (result) => result.smsResult.success,
   ).length;
 
+  const smsStatus: FallDispatchSummary["smsStatus"] =
+    recipientsTotal === 0
+      ? "FAILED"
+      : recipientsSucceeded === recipientsTotal
+        ? "SENT"
+        : recipientsSucceeded > 0
+          ? "PARTIAL"
+          : "FAILED";
+
   return {
     attempted: recipientsTotal > 0,
     success: recipientsSucceeded > 0,
     recipientsTotal,
     recipientsSucceeded,
+    decision: "EMERGENCY",
+    responseType: "NONE",
+    modelScore: 0,
+    responseWeight: 0,
+    finalScore: 0,
+    ttsMessage: "Emergency services contacted",
+    smsStatus,
   };
 }
 
@@ -122,6 +138,13 @@ export async function handleFallEvent(
     success: false,
     recipientsTotal: 0,
     recipientsSucceeded: 0,
+    decision: "CANCEL",
+    responseType: "POSITIVE",
+    modelScore: 0,
+    responseWeight: 0,
+    finalScore: 0,
+    ttsMessage: "",
+    smsStatus: "NOT_SENT",
   };
 
   console.log("[FallEvent] Validation result:", validationResult.status);

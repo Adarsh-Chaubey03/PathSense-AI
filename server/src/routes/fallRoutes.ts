@@ -37,6 +37,10 @@ function isMotionState(
   return typeof value === "string" && MOTION_STATES.has(value);
 }
 
+function formatNumeric(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(4) : "NaN";
+}
+
 /**
  * POST /fall-event
  *
@@ -179,6 +183,64 @@ router.post(
         orientationChange,
         transcript,
       };
+
+      const firstSnapshot = snapshot[0] as {
+        accelerometer?: { x?: number; y?: number; z?: number };
+        gyroscope?: { x?: number; y?: number; z?: number };
+      };
+      const lastSnapshot = snapshot[snapshot.length - 1] as {
+        accelerometer?: { x?: number; y?: number; z?: number };
+        gyroscope?: { x?: number; y?: number; z?: number };
+      };
+
+      console.log("[FallEvent] Incoming sensor vectors", {
+        eventId,
+        source,
+        sampleRateHz,
+        accelMagnitude: formatNumeric(accelMagnitude),
+        gyroMagnitude: formatNumeric(gyroMagnitude),
+        accelerometer: {
+          x: formatNumeric(accelerometer.x),
+          y: formatNumeric(accelerometer.y),
+          z: formatNumeric(accelerometer.z),
+        },
+        gyroscope: {
+          x: formatNumeric(gyroscope.x),
+          y: formatNumeric(gyroscope.y),
+          z: formatNumeric(gyroscope.z),
+        },
+        snapshotCount: snapshot.length,
+        snapshotFirst:
+          firstSnapshot?.accelerometer && firstSnapshot?.gyroscope
+            ? {
+                accelerometer: {
+                  x: formatNumeric(firstSnapshot.accelerometer.x ?? NaN),
+                  y: formatNumeric(firstSnapshot.accelerometer.y ?? NaN),
+                  z: formatNumeric(firstSnapshot.accelerometer.z ?? NaN),
+                },
+                gyroscope: {
+                  x: formatNumeric(firstSnapshot.gyroscope.x ?? NaN),
+                  y: formatNumeric(firstSnapshot.gyroscope.y ?? NaN),
+                  z: formatNumeric(firstSnapshot.gyroscope.z ?? NaN),
+                },
+              }
+            : null,
+        snapshotLast:
+          lastSnapshot?.accelerometer && lastSnapshot?.gyroscope
+            ? {
+                accelerometer: {
+                  x: formatNumeric(lastSnapshot.accelerometer.x ?? NaN),
+                  y: formatNumeric(lastSnapshot.accelerometer.y ?? NaN),
+                  z: formatNumeric(lastSnapshot.accelerometer.z ?? NaN),
+                },
+                gyroscope: {
+                  x: formatNumeric(lastSnapshot.gyroscope.x ?? NaN),
+                  y: formatNumeric(lastSnapshot.gyroscope.y ?? NaN),
+                  z: formatNumeric(lastSnapshot.gyroscope.z ?? NaN),
+                },
+              }
+            : null,
+      });
 
       const response: FallEventResponse = await handleFallEvent(request);
 
