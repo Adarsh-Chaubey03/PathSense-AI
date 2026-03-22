@@ -58,6 +58,20 @@ export interface FallDetectResponse {
   result: FallDetectResult;
 }
 
+export interface FallDetectRequest {
+  window: number[][];
+  sampleCount?: number;
+  sampleRateHz?: number;
+  windowStartMs?: number;
+  windowEndMs?: number;
+  segment?: {
+    rearPre: number;
+    core: number;
+    post: number;
+    total: number;
+  };
+}
+
 export async function postFallEvent(
   payload: FallEventRequest,
 ): Promise<FallEventResponse> {
@@ -72,22 +86,25 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function postFallDetect(
-  window: number[][],
+  payload: FallDetectRequest | number[][],
 ): Promise<FallDetectResponse> {
+  const requestPayload = Array.isArray(payload) ? { window: payload } : payload;
+
+  // Canonical FE fall-decision endpoint: /fall-detect
   return apiRequest<FallDetectResponse>("/fall-detect", {
     method: "POST",
-    body: JSON.stringify({ window }),
+    body: JSON.stringify(requestPayload),
   });
 }
 
 export async function postFallDetectWithRetry(
-  window: number[][],
+  payload: FallDetectRequest | number[][],
 ): Promise<FallDetectResponse | null> {
   try {
-    return await postFallDetect(window);
+    return await postFallDetect(payload);
   } catch {
     try {
-      return await postFallDetect(window);
+      return await postFallDetect(payload);
     } catch {
       return null;
     }

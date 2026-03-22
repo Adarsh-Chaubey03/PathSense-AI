@@ -37,105 +37,144 @@ export default function MonitoringScreen() {
   const isProcessingRef = useRef(false);
 
   // Define routeToConfirmation first (no dependencies on other callbacks)
-  const routeToConfirmation = useCallback((reason: string) => {
-    const { state } = getFallEvent();
+  const routeToConfirmation = useCallback(
+    (reason: string) => {
+      const { state } = getFallEvent();
 
-    if (
-      state !== "IDLE" &&
-      state !== "MONITORING" &&
-      state !== "CANDIDATE" &&
-      state !== "CONFIRMING"
-    ) {
-      resetFallEvent();
-      transitionFallEvent("MONITORING", "Reset stale flow before ML-confirmed fall");
-    }
+      if (
+        state !== "IDLE" &&
+        state !== "MONITORING" &&
+        state !== "CANDIDATE" &&
+        state !== "CONFIRMING"
+      ) {
+        resetFallEvent();
+        transitionFallEvent(
+          "MONITORING",
+          "Reset stale flow before ML-confirmed fall",
+        );
+      }
 
-    if (state === "IDLE") {
-      transitionFallEvent("MONITORING", "Edge filter activated monitoring");
-    }
+      if (state === "IDLE") {
+        transitionFallEvent("MONITORING", "Edge filter activated monitoring");
+      }
 
-    if (getFallEvent().state === "MONITORING") {
-      transitionFallEvent("CANDIDATE", "Edge AI detected potential fall pattern");
-    }
+      if (getFallEvent().state === "MONITORING") {
+        transitionFallEvent(
+          "CANDIDATE",
+          "Edge AI detected potential fall pattern",
+        );
+      }
 
-    if (getFallEvent().state === "CANDIDATE") {
-      transitionFallEvent("CONFIRMING", reason);
-    }
+      if (getFallEvent().state === "CANDIDATE") {
+        transitionFallEvent("CONFIRMING", reason);
+      }
 
-    router.push("./confirm");
-  }, [router]);
+      router.push("./confirm");
+    },
+    [router],
+  );
 
   // storeMLResultAndNavigate depends on routeToConfirmation
-  const storeMLResultAndNavigate = useCallback((
-    result: FallDetectResult,
-    fallProb: number,
-    falseProb: number,
-    sampleCount: number,
-    reason: string,
-  ): void => {
-    // Store the ML detection result
-    setMLDetectionResult({
-      result,
-      fallProbability: fallProb,
-      falseProbability: falseProb,
-      sampleCount,
-      triggeredAt: new Date().toISOString(),
-    });
+  const storeMLResultAndNavigate = useCallback(
+    (
+      result: FallDetectResult,
+      fallProb: number,
+      falseProb: number,
+      sampleCount: number,
+      reason: string,
+    ): void => {
+      // Store the ML detection result
+      setMLDetectionResult({
+        result,
+        fallProbability: fallProb,
+        falseProbability: falseProb,
+        sampleCount,
+        triggeredAt: new Date().toISOString(),
+      });
 
-    // Only navigate to confirmation for REAL_FALL
-    if (result === "REAL_FALL") {
-      routeToConfirmation(reason);
-    } else {
-      // For FALSE_ALARM or NO_FALL, reset and continue monitoring
-      setApiStatus(`ML determined: ${result} - continuing monitoring`);
-      resetEdgeFilter();
-    }
-  }, [routeToConfirmation]);
+      // Only navigate to confirmation for REAL_FALL
+      if (result === "REAL_FALL") {
+        routeToConfirmation(reason);
+      } else {
+        // For FALSE_ALARM or NO_FALL, reset and continue monitoring
+        setApiStatus(`ML determined: ${result} - continuing monitoring`);
+        resetEdgeFilter();
+      }
+    },
+    [routeToConfirmation],
+  );
 
   // processMLDetection depends on storeMLResultAndNavigate
-  const processMLDetection = useCallback(async (reason: string): Promise<void> => {
-    // Prevent concurrent processing
-    if (isProcessingRef.current) {
-      return;
-    }
-    isProcessingRef.current = true;
+  const processMLDetection = useCallback(
+    async (reason: string): Promise<void> => {
+      // Prevent concurrent processing
+      if (isProcessingRef.current) {
+        return;
+      }
+      isProcessingRef.current = true;
 
-    try {
-      // 1. Extract the 2-second buffer window (safe snapshot)
-      const window = sensorWindowStore.getWindowForML();
-      const sampleCount = window.length;
+      try {
+        // 1. Extract the 2-second buffer window (safe snapshot)
+        const windowPayload = sensorWindowStore.getWindowForApiCall();
+        const window = sensorWindowStore.getWindowForML();
+        const sampleCount = window.length;
+        const targetWindowSize = sensorWindowStore.getTargetWindowSize();
 
-      if (sampleCount < 50) {
-        setApiStatus(`Insufficient data: ${sampleCount} samples (need 50+)`);
+        if (!windowPayload || sampleCount < targetWindowSize) {
+          setApiStatus(
+            `Insufficient data: ${sampleCount} samples (need ${targetWindowSize})`,
+          );
+          isProcessingRef.current = false;
+          return;
+        }
+
+        setApiStatus(`Sending ${sampleCount} samples to ML API...`);
+
+        // 2. Call the ML backend API
+        const response = await postFallDetectWithRetry({
+          window,
+          sampleCount: windowPayload.sampleCount,
+          sampleRateHz: sensorWindowStore.getSampleRateHz(),
+          windowStartMs: windowPayload.windowStartMs,
+          windowEndMs: windowPayload.windowEndMs,
+          segment: {
+            rearPre: 40,
+            core: 20,
+            post: 40,
+            total: 100,
+          },
+        });
+
+        if (!response) {
+          setApiStatus("ML API failed - treating as potential fall");
+          // On API failure, default to showing confirmation (safety first)
+          storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, sampleCount, reason);
+          return;
+        }
+
+        // 3. Store ML result and handle based on response
+        const { result, fall_prob, false_prob } = response;
+        setApiStatus(
+          `ML result: ${result} (fall: ${(fall_prob * 100).toFixed(1)}%)`,
+        );
+
+        storeMLResultAndNavigate(
+          result,
+          fall_prob,
+          false_prob,
+          sampleCount,
+          reason,
+        );
+      } catch {
+        setApiStatus("Error processing fall detection");
+        // On error, default to showing confirmation (safety first)
+        storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, 0, reason);
+      } finally {
         isProcessingRef.current = false;
-        return;
       }
-
-      setApiStatus(`Sending ${sampleCount} samples to ML API...`);
-
-      // 2. Call the ML backend API
-      const response = await postFallDetectWithRetry(window);
-
-      if (!response) {
-        setApiStatus("ML API failed - treating as potential fall");
-        // On API failure, default to showing confirmation (safety first)
-        storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, sampleCount, reason);
-        return;
-      }
-
-      // 3. Store ML result and handle based on response
-      const { result, fall_prob, false_prob } = response;
-      setApiStatus(`ML result: ${result} (fall: ${(fall_prob * 100).toFixed(1)}%)`);
-
-      storeMLResultAndNavigate(result, fall_prob, false_prob, sampleCount, reason);
-    } catch {
-      setApiStatus("Error processing fall detection");
-      // On error, default to showing confirmation (safety first)
-      storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, 0, reason);
-    } finally {
-      isProcessingRef.current = false;
-    }
-  }, [storeMLResultAndNavigate]);
+    },
+    [storeMLResultAndNavigate],
+  );
 
   const handleSensorSample = useCallback(
     (newSample: SensorSample) => {
@@ -226,7 +265,8 @@ export default function MonitoringScreen() {
           : "waiting..."}
       </ThemedText>
       <ThemedText style={styles.bufferStatus}>
-        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()}/100 samples)
+        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()}/
+        {sensorWindowStore.getTargetWindowSize()} samples)
       </ThemedText>
       <ThemedText style={styles.edgeStatus}>
         Edge filter:{" "}
@@ -236,16 +276,14 @@ export default function MonitoringScreen() {
       </ThemedText>
       {edgeStatus?.windowStats && (
         <ThemedText style={styles.windowStats}>
-          Window: min={edgeStatus.windowStats.minAccG.toFixed(2)}g |
-          max={edgeStatus.windowStats.maxAccG.toFixed(2)}g |
-          gyro={edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s |
-          samples={edgeStatus.windowStats.sampleCount}
+          Window: min={edgeStatus.windowStats.minAccG.toFixed(2)}g | max=
+          {edgeStatus.windowStats.maxAccG.toFixed(2)}g | gyro=
+          {edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s | samples=
+          {edgeStatus.windowStats.sampleCount}
         </ThemedText>
       )}
       {apiStatus && (
-        <ThemedText style={styles.apiStatus}>
-          ML API: {apiStatus}
-        </ThemedText>
+        <ThemedText style={styles.apiStatus}>ML API: {apiStatus}</ThemedText>
       )}
       <TouchableOpacity onPress={handleSimulateCandidate} style={styles.link}>
         <ThemedText type="link">Simulate fall candidate</ThemedText>

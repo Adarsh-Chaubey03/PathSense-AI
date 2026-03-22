@@ -22,9 +22,22 @@ export interface SensorWindowData {
 }
 
 const WINDOW_DURATION_MS = 2000; // 2 seconds window
+const TARGET_SAMPLE_RATE_HZ = 50;
+const TARGET_WINDOW_SAMPLES = 100;
+const MAX_RETENTION_MS = 4000;
+const MAX_BUFFER_SAMPLES = TARGET_WINDOW_SAMPLES * 4;
 
 class SensorWindowStore {
   private samples: RawSensorDataPoint[] = [];
+
+  private trimBuffer(now: number): void {
+    const cutoff = now - MAX_RETENTION_MS;
+    this.samples = this.samples.filter((sample) => sample.timestamp >= cutoff);
+
+    if (this.samples.length > MAX_BUFFER_SAMPLES) {
+      this.samples.splice(0, this.samples.length - MAX_BUFFER_SAMPLES);
+    }
+  }
 
   /**
    * Add a new sensor sample to the window
@@ -51,24 +64,55 @@ class SensorWindowStore {
       timestamp: now,
     });
 
-    // Remove expired samples (older than 2 seconds)
-    const cutoff = now - WINDOW_DURATION_MS;
-    this.samples = this.samples.filter((s) => s.timestamp >= cutoff);
+    this.trimBuffer(now);
+  }
+
+  private getLatestWindowSamples(
+    targetSamples: number = TARGET_WINDOW_SAMPLES,
+  ): RawSensorDataPoint[] {
+    if (this.samples.length === 0) {
+      return [];
+    }
+
+    const latestTimestamp = this.samples[this.samples.length - 1].timestamp;
+    const windowCutoff = latestTimestamp - WINDOW_DURATION_MS;
+    const recentSamples = this.samples.filter(
+      (sample) => sample.timestamp >= windowCutoff,
+    );
+
+    if (recentSamples.length <= targetSamples) {
+      return recentSamples;
+    }
+
+    const stride = recentSamples.length / targetSamples;
+    const normalizedSamples: RawSensorDataPoint[] = [];
+
+    for (let index = 0; index < targetSamples; index += 1) {
+      const sourceIndex = Math.min(
+        recentSamples.length - 1,
+        Math.floor(index * stride),
+      );
+      normalizedSamples.push(recentSamples[sourceIndex]);
+    }
+
+    return normalizedSamples;
   }
 
   /**
    * Get the current sensor window data for API call
    */
   getWindowForApiCall(): SensorWindowData | null {
-    if (this.samples.length === 0) {
+    const windowSamples = this.getLatestWindowSamples();
+
+    if (windowSamples.length === 0) {
       return null;
     }
 
     return {
-      samples: [...this.samples],
-      windowStartMs: this.samples[0].timestamp,
-      windowEndMs: this.samples[this.samples.length - 1].timestamp,
-      sampleCount: this.samples.length,
+      samples: windowSamples,
+      windowStartMs: windowSamples[0].timestamp,
+      windowEndMs: windowSamples[windowSamples.length - 1].timestamp,
+      sampleCount: windowSamples.length,
     };
   }
 
@@ -76,7 +120,29 @@ class SensorWindowStore {
    * Get raw samples array for API payload
    */
   getSamplesForApi(): RawSensorDataPoint[] {
-    return [...this.samples];
+    return this.getLatestWindowSamples();
+  }
+
+  /**
+   * Get model-ready 2-second window in [[acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z], ...]
+   */
+  getWindowForML(): number[][] {
+    return this.getLatestWindowSamples().map((sample) => [
+      sample.acc_x,
+      sample.acc_y,
+      sample.acc_z,
+      sample.gyro_x,
+      sample.gyro_y,
+      sample.gyro_z,
+    ]);
+  }
+
+  /**
+   * Get percentage fill for the active 2-second model window.
+   */
+  getBufferFillPercent(): number {
+    const fill = (this.getSampleCount() / TARGET_WINDOW_SAMPLES) * 100;
+    return Math.max(0, Math.min(100, Math.round(fill)));
   }
 
   /**
@@ -90,7 +156,15 @@ class SensorWindowStore {
    * Get current sample count
    */
   getSampleCount(): number {
-    return this.samples.length;
+    return this.getLatestWindowSamples().length;
+  }
+
+  getTargetWindowSize(): number {
+    return TARGET_WINDOW_SAMPLES;
+  }
+
+  getSampleRateHz(): number {
+    return TARGET_SAMPLE_RATE_HZ;
   }
 }
 

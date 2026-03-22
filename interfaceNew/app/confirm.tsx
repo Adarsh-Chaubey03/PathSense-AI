@@ -18,8 +18,9 @@ import {
 } from "@/src/state/fall-event-store";
 import { useFallEvent } from "@/src/state/use-fall-event";
 import type { MLDetectionData } from "@/src/features/fall-event/event.types";
+import { CONFIRMATION_TIMEOUT_SECONDS } from "@/src/features/fall-event/config";
 
-const COUNTDOWN_SECONDS = 10;
+const COUNTDOWN_SECONDS = CONFIRMATION_TIMEOUT_SECONDS;
 
 export default function ConfirmScreen() {
   const router = useRouter();
@@ -100,7 +101,10 @@ export default function ConfirmScreen() {
     setIsEscalating(true);
 
     if (getFallEvent().state === "CONFIRMING") {
-      transitionFallEvent("ALERTING", "No confirmation response - triggering emergency");
+      transitionFallEvent(
+        "ALERTING",
+        "No confirmation response - triggering emergency",
+      );
     }
 
     router.push("./alert");
