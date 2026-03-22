@@ -1,4 +1,5 @@
 import path from "node:path";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 
@@ -8,10 +9,58 @@ const ML_SCRIPT_PATH = path.resolve(
   __dirname,
   "../../ml/run_fall_detection.py",
 );
-const PYTHON_BIN = process.env.PYTHON_BIN || "python";
+
+function resolvePythonBin() {
+  if (process.env.PYTHON_BIN && process.env.PYTHON_BIN.trim().length > 0) {
+    return process.env.PYTHON_BIN.trim();
+  }
+
+  const repoRoot = path.resolve(__dirname, "../../..");
+  const serverRoot = path.resolve(__dirname, "../..");
+
+  const windowsCandidates = [
+    path.join(serverRoot, ".venv", "Scripts", "python.exe"),
+    path.join(serverRoot, "venv", "Scripts", "python.exe"),
+    path.join(repoRoot, ".venv", "Scripts", "python.exe"),
+    path.join(repoRoot, "venv", "Scripts", "python.exe"),
+    path.join(
+      repoRoot,
+      "fault_detection_model",
+      ".venv",
+      "Scripts",
+      "python.exe",
+    ),
+    path.join(
+      repoRoot,
+      "fault_detection_model",
+      "venv",
+      "Scripts",
+      "python.exe",
+    ),
+  ];
+
+  const unixCandidates = [
+    path.join(serverRoot, ".venv", "bin", "python"),
+    path.join(serverRoot, "venv", "bin", "python"),
+    path.join(repoRoot, ".venv", "bin", "python"),
+    path.join(repoRoot, "venv", "bin", "python"),
+    path.join(repoRoot, "fault_detection_model", ".venv", "bin", "python"),
+    path.join(repoRoot, "fault_detection_model", "venv", "bin", "python"),
+  ];
+
+  const candidates =
+    process.platform === "win32" ? windowsCandidates : unixCandidates;
+
+  const matched = candidates.find((candidate) => existsSync(candidate));
+  return matched ?? "python";
+}
+
+const PYTHON_BIN = resolvePythonBin();
 const INFERENCE_TIMEOUT_MS = Number(
   process.env.FALL_DETECT_TIMEOUT_MS || 15000,
 );
+
+console.log(`[FallDetect] Python runtime: ${PYTHON_BIN}`);
 
 function isFiniteNumber(value) {
   return typeof value === "number" && Number.isFinite(value);

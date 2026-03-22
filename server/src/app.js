@@ -14,17 +14,33 @@ app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.use("/api", (req, _res, next) => {
+  const receivedAt = new Date().toISOString();
+  const userAgent = req.headers["user-agent"] ?? "unknown";
+  const forwardedFor = req.headers["x-forwarded-for"];
+  const sourceIp =
+    typeof forwardedFor === "string"
+      ? forwardedFor.split(",")[0].trim()
+      : req.ip;
+
+  console.log(
+    `[API][IN] ${receivedAt} ${req.method} ${req.originalUrl} ip=${sourceIp} ua=${userAgent}`,
+  );
+
+  next();
+});
+
 app.get("/", (_req, res) => {
   res.json({
     message: "Express server is running.",
-    runtime: "Node.js + Bun"
+    runtime: "Node.js + Bun",
   });
 });
 
 app.get("/api/health", (_req, res) => {
   res.status(200).json({
     status: "ok",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 
@@ -37,14 +53,14 @@ app.use("/api", fallDetectRoutes);
 
 app.use((req, res) => {
   res.status(404).json({
-    message: `Route not found: ${req.method} ${req.originalUrl}`
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
 
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({
-    message: "Internal server error"
+    message: "Internal server error",
   });
 });
 

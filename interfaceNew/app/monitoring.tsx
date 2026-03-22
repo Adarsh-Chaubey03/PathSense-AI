@@ -12,6 +12,7 @@ import {
   postFallDetectWithRetry,
   type FallDetectResult,
 } from "@/src/services/api/fall-events";
+import { getApiBaseUrl } from "@/src/services/api/client";
 import {
   getFallEvent,
   resetFallEvent,
@@ -36,6 +37,7 @@ export default function MonitoringScreen() {
   const [bufferFill, setBufferFill] = useState(0);
   const [apiStatus, setApiStatus] = useState<string | null>(null);
   const [monitoringLogs, setMonitoringLogs] = useState<string[]>([]);
+  const apiBaseUrl = getApiBaseUrl();
 
   // Prevent concurrent API calls
   const isProcessingRef = useRef(false);
@@ -252,6 +254,7 @@ export default function MonitoringScreen() {
     sensorWindowStore.clear();
     inTriggerRangeRef.current = false;
     setMonitoringLogs([]);
+    appendMonitoringLog(`API base resolved to ${apiBaseUrl}`);
 
     // Start sensor monitoring
     services.sensorAdapter.start(handleSensorSample);
@@ -265,7 +268,7 @@ export default function MonitoringScreen() {
     return () => {
       services.sensorAdapter.stop();
     };
-  }, [handleSensorSample]);
+  }, [appendMonitoringLog, apiBaseUrl, handleSensorSample]);
 
   const handleSimulateCandidate = (): void => {
     const { state } = getFallEvent();
@@ -309,6 +312,9 @@ export default function MonitoringScreen() {
       <ThemedText type="title">Monitoring</ThemedText>
       <ThemedText style={styles.body}>
         Continuous monitoring is active.
+      </ThemedText>
+      <ThemedText style={styles.apiBaseStatus}>
+        API Base: {apiBaseUrl}
       </ThemedText>
       <StatusBadge state={event.state} />
       <ThemedText style={styles.body}>
@@ -395,6 +401,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     opacity: 0.9,
     color: "#2196F3",
+  },
+  apiBaseStatus: {
+    lineHeight: 18,
+    fontSize: 11,
+    opacity: 0.75,
+    fontFamily: "monospace",
   },
   logsTitle: {
     marginTop: 8,
