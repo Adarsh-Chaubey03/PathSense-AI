@@ -6,6 +6,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import Twilio from 'twilio';
 import { sendSMS, type SMSResult } from './smsService.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -19,6 +20,17 @@ interface Contact {
 interface AlertResult {
   contact: Contact;
   smsResult: SMSResult;
+}
+
+interface CallResult {
+  success: boolean;
+  callSid?: string;
+  error?: string;
+}
+
+interface CallDispatchResult {
+  contact: Contact;
+  callResult: CallResult;
 }
 
 export type AlertTarget = 'CONTACTS' | 'EMERGENCY';
@@ -101,6 +113,91 @@ function buildMessageWithLocation(message: string, locationLink: string): string
   return `${message}\nLocation: ${locationLink}`;
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
+function getCallTarget(contacts: Contact[]): Contact {
+  const timeoutAlertPhone = getTimeoutAlertPhone();
+  const matched = contacts.find((contact) => contact.phone === timeoutAlertPhone);
+  if (matched) {
+    return matched;
+  }
+
+  return {
+    name: 'Emergency Friend',
+    phone: timeoutAlertPhone,
+  };
+}
+
+export async function ring_emergency_friend_on_timeout(
+  spokenMessage?: string,
+): Promise<CallDispatchResult> {
+  const contacts = getContacts();
+  const contact = getCallTarget(contacts);
+
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken = process.env.TWILIO_AUTH_TOKEN;
+  const twilioPhoneNumber = process.env.TWILIO_PHONE_NUMBER;
+  const demoMode = process.env.DEMO_MODE === 'true';
+
+  const message =
+    spokenMessage?.trim() ||
+    'Emergency alert. Your friend may have fallen and is not responding. Please check immediately.';
+
+  if (demoMode) {
+    return {
+      contact,
+      callResult: {
+        success: true,
+        callSid: `DEMO_CALL_${Date.now()}`,
+      },
+    };
+  }
+
+  if (!accountSid || !authToken || !twilioPhoneNumber) {
+    return {
+      contact,
+      callResult: {
+        success: false,
+        error:
+          'Twilio call configuration missing. Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER.',
+      },
+    };
+  }
+
+  try {
+    const client = Twilio(accountSid, authToken);
+    const call = await client.calls.create({
+      to: contact.phone,
+      from: twilioPhoneNumber,
+      twiml: `<Response><Say voice=\"alice\">${escapeXml(message)}</Say></Response>`,
+    });
+
+    return {
+      contact,
+      callResult: {
+        success: true,
+        callSid: call.sid,
+      },
+    };
+  } catch (error) {
+    const messageText = error instanceof Error ? error.message : 'Failed to place emergency call';
+    return {
+      contact,
+      callResult: {
+        success: false,
+        error: messageText,
+      },
+    };
+  }
+}
+
 export async function send_alert_by_priority(
   message: string,
   options: AlertDispatchOptions,
@@ -152,6 +249,7 @@ export async function send_alert_by_priority(
 }
 
 export default {
+  ring_emergency_friend_on_timeout,
   send_alert_by_priority,
   send_alert_to_contacts,
   getContacts,
