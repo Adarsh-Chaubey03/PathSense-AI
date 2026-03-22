@@ -1,36 +1,41 @@
-import { useEffect, useState, useCallback, useRef } from "react";
-import { useRouter } from "expo-router";
-import { ScrollView, StyleSheet, TouchableOpacity } from "react-native";
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useRouter } from 'expo-router';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from "@/components/themed-text";
-import { ThemedView } from "@/components/themed-view";
-import { StatusBadge } from "@/src/components/common/StatusBadge";
-import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
-import { services } from "@/src/services";
-import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
+import { ThemedText } from '@/components/themed-text';
+import { ThemedView } from '@/components/themed-view';
+import { Card, Button, InfoCard } from '@/components/ui';
+import { StatusBadge } from '@/src/components/common/StatusBadge';
+import { useThemeColor } from '@/hooks/use-theme-color';
+import { Spacing, BorderRadius, Palette } from '@/constants/theme';
+import type { SensorSample } from '@/src/services/sensors/sensor-adapter';
+import { services } from '@/src/services';
+import { sensorWindowStore } from '@/src/services/sensors/sensor-window-store';
 import {
   postFallDetectWithRetry,
   type FallDetectResult,
-} from "@/src/services/api/fall-events";
-import { getApiBaseUrl } from "@/src/services/api/client";
+} from '@/src/services/api/fall-events';
+import { getApiBaseUrl } from '@/src/services/api/client';
 import {
   getFallEvent,
   resetFallEvent,
   transitionFallEvent,
   setMLDetectionResult,
-} from "@/src/state/fall-event-store";
-import { useFallEvent } from "@/src/state/use-fall-event";
+} from '@/src/state/fall-event-store';
+import { useFallEvent } from '@/src/state/use-fall-event';
 import {
   evaluateWithEdgeFilter,
   getEdgeFilterThresholds,
   resetEdgeFilter,
   type DetectionDecision,
-} from "@/src/features/fall-event/detection";
+} from '@/src/features/fall-event/detection';
 
 const EDGE_THRESHOLDS = getEdgeFilterThresholds();
 
 export default function MonitoringScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const event = useFallEvent();
   const [sample, setSample] = useState<SensorSample | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<DetectionDecision | null>(null);
@@ -39,7 +44,12 @@ export default function MonitoringScreen() {
   const [monitoringLogs, setMonitoringLogs] = useState<string[]>([]);
   const apiBaseUrl = getApiBaseUrl();
 
-  // Prevent concurrent API calls
+  const successColor = useThemeColor({}, 'success');
+  const primaryColor = useThemeColor({}, 'primary');
+  const accentColor = useThemeColor({}, 'accent');
+  const warningColor = useThemeColor({}, 'warning');
+  const cardBg = useThemeColor({}, 'card');
+
   const isProcessingRef = useRef(false);
   const inTriggerRangeRef = useRef(false);
 
@@ -49,54 +59,45 @@ export default function MonitoringScreen() {
     setMonitoringLogs((prev) => [...prev.slice(-79), entry]);
   }, []);
 
-  // Define routeToConfirmation first (no dependencies on other callbacks)
   const routeToConfirmation = useCallback(
     (reason: string) => {
       const { state } = getFallEvent();
 
       if (
-        state !== "IDLE" &&
-        state !== "MONITORING" &&
-        state !== "CANDIDATE" &&
-        state !== "CONFIRMING"
+        state !== 'IDLE' &&
+        state !== 'MONITORING' &&
+        state !== 'CANDIDATE' &&
+        state !== 'CONFIRMING'
       ) {
         resetFallEvent();
-        transitionFallEvent(
-          "MONITORING",
-          "Reset stale flow before ML-confirmed fall",
-        );
+        transitionFallEvent('MONITORING', 'Reset stale flow before ML-confirmed fall');
       }
 
-      if (state === "IDLE") {
-        transitionFallEvent("MONITORING", "Edge filter activated monitoring");
+      if (state === 'IDLE') {
+        transitionFallEvent('MONITORING', 'Edge filter activated monitoring');
       }
 
-      if (getFallEvent().state === "MONITORING") {
-        transitionFallEvent(
-          "CANDIDATE",
-          "Edge AI detected potential fall pattern",
-        );
+      if (getFallEvent().state === 'MONITORING') {
+        transitionFallEvent('CANDIDATE', 'Edge AI detected potential fall pattern');
       }
 
-      if (getFallEvent().state === "CANDIDATE") {
-        transitionFallEvent("CONFIRMING", reason);
+      if (getFallEvent().state === 'CANDIDATE') {
+        transitionFallEvent('CONFIRMING', reason);
       }
 
-      router.push("./confirm");
+      router.push('./confirm');
     },
-    [router],
+    [router]
   );
 
-  // storeMLResultAndNavigate depends on routeToConfirmation
   const storeMLResultAndNavigate = useCallback(
     (
       result: FallDetectResult,
       fallProb: number,
       falseProb: number,
       sampleCount: number,
-      reason: string,
+      reason: string
     ): void => {
-      // Store the ML detection result
       setMLDetectionResult({
         result,
         fallProbability: fallProb,
@@ -105,38 +106,27 @@ export default function MonitoringScreen() {
         triggeredAt: new Date().toISOString(),
       });
 
-      // Only navigate to confirmation for REAL_FALL
-      if (result === "REAL_FALL") {
-        appendMonitoringLog(
-          "Backend confirmed REAL_FALL -> opening Are you OK page",
-        );
+      if (result === 'REAL_FALL') {
+        appendMonitoringLog('Backend confirmed REAL_FALL -> opening Are you OK page');
         routeToConfirmation(reason);
       } else {
-        // For FALSE_ALARM or NO_FALL, reset and continue monitoring
         setApiStatus(`ML determined: ${result} - continuing monitoring`);
-        appendMonitoringLog(
-          `Backend result ${result} -> staying on monitoring and resetting edge filter`,
-        );
+        appendMonitoringLog(`Backend result ${result} -> staying on monitoring and resetting edge filter`);
         resetEdgeFilter();
       }
     },
-    [appendMonitoringLog, routeToConfirmation],
+    [appendMonitoringLog, routeToConfirmation]
   );
 
-  // processMLDetection depends on storeMLResultAndNavigate
   const processMLDetection = useCallback(
     async (reason: string): Promise<void> => {
-      // Prevent concurrent processing
       if (isProcessingRef.current) {
-        appendMonitoringLog(
-          "ML API call skipped: previous request still in progress",
-        );
+        appendMonitoringLog('ML API call skipped: previous request still in progress');
         return;
       }
       isProcessingRef.current = true;
 
       try {
-        // 1. Extract the 2-second buffer window (safe snapshot)
         const windowPayload = sensorWindowStore.getWindowForApiCall();
         const window = sensorWindowStore.getWindowForML();
         const sampleCount = window.length;
@@ -144,22 +134,17 @@ export default function MonitoringScreen() {
         const targetWindowSize = sensorWindowStore.getTargetWindowSize();
 
         if (!windowPayload || sampleCount !== targetWindowSize) {
-          setApiStatus(
-            `Insufficient 2s window: buffered=${bufferedSamples}, normalized=${sampleCount}, need=${targetWindowSize}`,
-          );
+          setApiStatus(`Insufficient window: ${bufferedSamples}/${targetWindowSize}`);
           appendMonitoringLog(
-            `ML API not called: 2s pre-fall window not ready (buffered=${bufferedSamples}, normalized=${sampleCount}/${targetWindowSize})`,
+            `ML API not called: window not ready (${bufferedSamples}/${targetWindowSize})`
           );
           isProcessingRef.current = false;
           return;
         }
 
-        setApiStatus(`Sending ${sampleCount} samples to ML API...`);
-        appendMonitoringLog(
-          `Trigger API call: window=${sampleCount}x6, duration=${windowPayload.windowEndMs - windowPayload.windowStartMs}ms`,
-        );
+        setApiStatus(`Analyzing ${sampleCount} samples...`);
+        appendMonitoringLog(`Trigger API call: window=${sampleCount}x6`);
 
-        // 2. Call the ML backend API
         const response = await postFallDetectWithRetry({
           window,
           sampleCount: windowPayload.sampleCount,
@@ -175,53 +160,35 @@ export default function MonitoringScreen() {
         });
 
         if (!response) {
-          setApiStatus("ML API failed - treating as potential fall");
-          appendMonitoringLog(
-            "ML API call failed; fallback REAL_FALL flow applied",
-          );
-          // On API failure, default to showing confirmation (safety first)
-          storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, sampleCount, reason);
+          setApiStatus('ML API failed - treating as potential fall');
+          appendMonitoringLog('ML API call failed; fallback REAL_FALL flow applied');
+          storeMLResultAndNavigate('REAL_FALL', 0.5, 0.5, sampleCount, reason);
           return;
         }
 
-        // 3. Store ML result and handle based on response
         const { result, fall_prob, false_prob } = response;
-        setApiStatus(
-          `ML result: ${result} (fall: ${(fall_prob * 100).toFixed(1)}%)`,
-        );
+        setApiStatus(`Result: ${result} (${(fall_prob * 100).toFixed(0)}%)`);
         appendMonitoringLog(
-          `ML API response: ${result}, fall=${(fall_prob * 100).toFixed(1)}%, false=${(false_prob * 100).toFixed(1)}%`,
+          `ML API response: ${result}, fall=${(fall_prob * 100).toFixed(1)}%`
         );
 
-        storeMLResultAndNavigate(
-          result,
-          fall_prob,
-          false_prob,
-          sampleCount,
-          reason,
-        );
+        storeMLResultAndNavigate(result, fall_prob, false_prob, sampleCount, reason);
       } catch {
-        setApiStatus("Error processing fall detection");
-        appendMonitoringLog(
-          "ML API error during processing; fallback REAL_FALL flow applied",
-        );
-        // On error, default to showing confirmation (safety first)
-        storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, 0, reason);
+        setApiStatus('Error processing fall detection');
+        appendMonitoringLog('ML API error during processing; fallback REAL_FALL flow applied');
+        storeMLResultAndNavigate('REAL_FALL', 0.5, 0.5, 0, reason);
       } finally {
         isProcessingRef.current = false;
       }
     },
-    [appendMonitoringLog, storeMLResultAndNavigate],
+    [appendMonitoringLog, storeMLResultAndNavigate]
   );
 
   const handleSensorSample = useCallback(
     (newSample: SensorSample) => {
       setSample(newSample);
-
-      // Update buffer fill indicator
       setBufferFill(sensorWindowStore.getBufferFillPercent());
 
-      // Process sample through edge AI filter
       const decision = evaluateWithEdgeFilter(newSample);
       setEdgeStatus(decision);
 
@@ -232,37 +199,31 @@ export default function MonitoringScreen() {
 
       if (enteredTriggerRange && !inTriggerRangeRef.current) {
         appendMonitoringLog(
-          `Sensor entered fall range: acc=${accMagG.toFixed(2)}g, gyro=${newSample.gyroMagnitude.toFixed(2)}rad/s`,
+          `Sensor entered fall range: acc=${accMagG.toFixed(2)}g, gyro=${newSample.gyroMagnitude.toFixed(2)}rad/s`
         );
       }
       inTriggerRangeRef.current = enteredTriggerRange;
 
-      // Edge-filter responsibility: when spike detected, extract buffer and call ML API
       if (decision.shouldEscalateCandidate) {
-        appendMonitoringLog(
-          `Edge filter CALL_API triggered: ${decision.reason}`,
-        );
-        void processMLDetection("Edge filter detected a potential fall");
+        appendMonitoringLog(`Edge filter CALL_API triggered: ${decision.reason}`);
+        void processMLDetection('Edge filter detected a potential fall');
       }
     },
-    [appendMonitoringLog, processMLDetection],
+    [appendMonitoringLog, processMLDetection]
   );
 
   useEffect(() => {
-    // Reset edge filter and clear buffer when monitoring starts
     resetEdgeFilter();
     sensorWindowStore.clear();
     inTriggerRangeRef.current = false;
     setMonitoringLogs([]);
     appendMonitoringLog(`API base resolved to ${apiBaseUrl}`);
 
-    // Start sensor monitoring
     services.sensorAdapter.start(handleSensorSample);
 
-    // Ensure we're in MONITORING state
     const { state } = getFallEvent();
-    if (state === "IDLE") {
-      transitionFallEvent("MONITORING", "Monitoring screen activated");
+    if (state === 'IDLE') {
+      transitionFallEvent('MONITORING', 'Monitoring screen activated');
     }
 
     return () => {
@@ -274,97 +235,154 @@ export default function MonitoringScreen() {
     const { state } = getFallEvent();
 
     if (
-      state !== "IDLE" &&
-      state !== "MONITORING" &&
-      state !== "CANDIDATE" &&
-      state !== "CONFIRMING"
+      state !== 'IDLE' &&
+      state !== 'MONITORING' &&
+      state !== 'CANDIDATE' &&
+      state !== 'CONFIRMING'
     ) {
       resetFallEvent();
-      transitionFallEvent("MONITORING", "Reset stale flow before simulation");
+      transitionFallEvent('MONITORING', 'Reset stale flow before simulation');
     }
 
-    if (state === "IDLE") {
-      transitionFallEvent("MONITORING", "Monitoring screen activated");
+    if (state === 'IDLE') {
+      transitionFallEvent('MONITORING', 'Monitoring screen activated');
     }
 
-    if (getFallEvent().state === "MONITORING") {
-      transitionFallEvent("CANDIDATE", "Manual fall candidate simulation");
+    if (getFallEvent().state === 'MONITORING') {
+      transitionFallEvent('CANDIDATE', 'Manual fall candidate simulation');
     }
 
-    if (getFallEvent().state === "CANDIDATE") {
-      transitionFallEvent("CONFIRMING", "Move to confirmation stage");
+    if (getFallEvent().state === 'CANDIDATE') {
+      transitionFallEvent('CONFIRMING', 'Move to confirmation stage');
     }
 
-    // Store mock ML result for simulation
     setMLDetectionResult({
-      result: "REAL_FALL",
+      result: 'REAL_FALL',
       fallProbability: 0.85,
       falseProbability: 0.15,
       sampleCount: sensorWindowStore.getTargetWindowSize(),
       triggeredAt: new Date().toISOString(),
     });
 
-    router.push("./confirm");
+    router.push('./confirm');
   };
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Monitoring</ThemedText>
-      <ThemedText style={styles.body}>
-        Continuous monitoring is active.
-      </ThemedText>
-      <ThemedText style={styles.apiBaseStatus}>
-        API Base: {apiBaseUrl}
-      </ThemedText>
-      <StatusBadge state={event.state} />
-      <ThemedText style={styles.body}>
-        Sensor sample:{" "}
-        {sample
-          ? `motion ${sample.motionScore.toFixed(2)} | accel ${sample.accelMagnitude.toFixed(2)} m/s² | gyro ${sample.gyroMagnitude.toFixed(2)} rad/s | ${sample.motionState}`
-          : "waiting..."}
-      </ThemedText>
-      <ThemedText style={styles.bufferStatus}>
-        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()} raw →{" "}
-        {sensorWindowStore.getTargetWindowSize()} model samples)
-      </ThemedText>
-      <ThemedText style={styles.edgeStatus}>
-        Edge filter:{" "}
-        {edgeStatus
-          ? `${edgeStatus.edgeDecision} - ${edgeStatus.reason}`
-          : "initializing..."}
-      </ThemedText>
-      {edgeStatus?.windowStats && (
-        <ThemedText style={styles.windowStats}>
-          Window: min={edgeStatus.windowStats.minAccG.toFixed(2)}g | max=
-          {edgeStatus.windowStats.maxAccG.toFixed(2)}g | gyro=
-          {edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s | samples=
-          {edgeStatus.windowStats.sampleCount}
-        </ThemedText>
-      )}
-      {apiStatus && (
-        <ThemedText style={styles.apiStatus}>ML API: {apiStatus}</ThemedText>
-      )}
-      <ThemedText style={styles.logsTitle}>Monitoring logs</ThemedText>
-      {monitoringLogs.length > 0 ? (
-        <ScrollView
-          style={styles.logsContainer}
-          contentContainerStyle={styles.logsContentContainer}
-        >
-          {monitoringLogs
-            .slice()
-            .reverse()
-            .map((line) => (
-              <ThemedText key={line} style={styles.logLine}>
-                {line}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content,
+          { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom + Spacing.xxl },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Header */}
+        <View style={styles.header}>
+          <ThemedText type="title">Monitoring</ThemedText>
+          <StatusBadge state={event.state} showDescription={false} />
+        </View>
+
+        {/* Active Status Indicator */}
+        <Card variant="glass" style={styles.activeCard}>
+          <View style={[styles.pulseOuter, { borderColor: successColor }]}>
+            <View style={[styles.pulseInner, { backgroundColor: successColor }]} />
+          </View>
+          <ThemedText type="subtitle">Monitoring Active</ThemedText>
+          <ThemedText type="caption">Continuously tracking your safety</ThemedText>
+        </Card>
+
+        {/* Sensor Data Cards */}
+        <View style={styles.sensorGrid}>
+          <InfoCard
+            label="Motion Score"
+            value={sample ? sample.motionScore.toFixed(2) : '--'}
+            variant="accent"
+            size="sm"
+          />
+          <InfoCard
+            label="Acceleration"
+            value={sample ? `${sample.accelMagnitude.toFixed(1)} m/s²` : '--'}
+            variant="default"
+            size="sm"
+          />
+        </View>
+
+        <View style={styles.sensorGrid}>
+          <InfoCard
+            label="Gyroscope"
+            value={sample ? `${sample.gyroMagnitude.toFixed(2)} rad/s` : '--'}
+            variant="warning"
+            size="sm"
+          />
+          <InfoCard
+            label="Buffer"
+            value={`${bufferFill}%`}
+            variant="success"
+            size="sm"
+          />
+        </View>
+
+        {/* Edge Filter Status */}
+        <Card variant="outlined" padding="md">
+          <ThemedText type="label" style={styles.sectionLabel}>Edge Filter</ThemedText>
+          <ThemedText type="caption">
+            {edgeStatus ? `${edgeStatus.edgeDecision} - ${edgeStatus.reason}` : 'Initializing...'}
+          </ThemedText>
+          {edgeStatus?.windowStats && (
+            <View style={styles.statsRow}>
+              <ThemedText type="caption" style={styles.statItem}>
+                min: {edgeStatus.windowStats.minAccG.toFixed(2)}g
               </ThemedText>
-            ))}
-        </ScrollView>
-      ) : (
-        <ThemedText style={styles.logLine}>No log events yet.</ThemedText>
-      )}
-      <TouchableOpacity onPress={handleSimulateCandidate} style={styles.link}>
-        <ThemedText type="link">Simulate fall candidate</ThemedText>
-      </TouchableOpacity>
+              <ThemedText type="caption" style={styles.statItem}>
+                max: {edgeStatus.windowStats.maxAccG.toFixed(2)}g
+              </ThemedText>
+              <ThemedText type="caption" style={styles.statItem}>
+                gyro: {edgeStatus.windowStats.maxGyro.toFixed(2)}
+              </ThemedText>
+            </View>
+          )}
+        </Card>
+
+        {/* API Status */}
+        {apiStatus && (
+          <Card variant="default" padding="sm" style={styles.apiCard}>
+            <ThemedText type="caption" style={{ color: primaryColor }}>
+              ML: {apiStatus}
+            </ThemedText>
+          </Card>
+        )}
+
+        {/* Logs Section */}
+        <Card variant="outlined" padding="md" style={styles.logsCard}>
+          <ThemedText type="label" style={styles.sectionLabel}>Activity Log</ThemedText>
+          <View style={styles.logsContainer}>
+            {monitoringLogs.length > 0 ? (
+              monitoringLogs
+                .slice()
+                .reverse()
+                .slice(0, 10)
+                .map((line, idx) => (
+                  <ThemedText key={`${line}-${idx}`} type="caption" style={styles.logLine}>
+                    {line}
+                  </ThemedText>
+                ))
+            ) : (
+              <ThemedText type="caption" style={styles.logLine}>
+                No activity yet...
+              </ThemedText>
+            )}
+          </View>
+        </Card>
+
+        {/* Simulate Button */}
+        <Button
+          title="Simulate Fall Detection"
+          variant="outline"
+          onPress={handleSimulateCandidate}
+          style={styles.simulateButton}
+        />
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -372,65 +390,70 @@ export default function MonitoringScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    justifyContent: "center",
-    gap: 12,
   },
-  body: {
-    lineHeight: 22,
+  scrollView: {
+    flex: 1,
   },
-  bufferStatus: {
-    lineHeight: 20,
-    fontSize: 12,
-    opacity: 0.9,
-    color: "#4CAF50",
+  content: {
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.md,
   },
-  edgeStatus: {
-    lineHeight: 20,
-    fontSize: 12,
-    opacity: 0.8,
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
   },
-  windowStats: {
-    lineHeight: 18,
-    fontSize: 11,
-    opacity: 0.6,
-    fontFamily: "monospace",
+  activeCard: {
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.xl,
   },
-  apiStatus: {
-    lineHeight: 20,
-    fontSize: 12,
-    opacity: 0.9,
-    color: "#2196F3",
+  pulseOuter: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    borderWidth: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: Spacing.sm,
   },
-  apiBaseStatus: {
-    lineHeight: 18,
-    fontSize: 11,
-    opacity: 0.75,
-    fontFamily: "monospace",
+  pulseInner: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
-  logsTitle: {
-    marginTop: 8,
-    fontSize: 12,
-    opacity: 0.9,
-    fontWeight: "600",
+  sensorGrid: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  sectionLabel: {
+    marginBottom: Spacing.sm,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    marginTop: Spacing.sm,
+  },
+  statItem: {
+    fontFamily: 'monospace',
+  },
+  apiCard: {
+    borderLeftWidth: 3,
+    borderLeftColor: Palette.primary,
+  },
+  logsCard: {
+    maxHeight: 200,
   },
   logsContainer: {
-    maxHeight: 220,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-  },
-  logsContentContainer: {
-    gap: 4,
+    gap: Spacing.xs,
   },
   logLine: {
-    lineHeight: 16,
+    fontFamily: 'monospace',
     fontSize: 11,
-    opacity: 0.85,
-    fontFamily: "monospace",
+    lineHeight: 16,
   },
-  link: {
-    marginTop: 12,
+  simulateButton: {
+    marginTop: Spacing.md,
   },
 });
