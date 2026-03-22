@@ -9,7 +9,7 @@ import { Card, Button } from "@/components/ui";
 import { DispatchStatusCard } from "@/src/components/alert/DispatchStatusCard";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { Spacing, Palette } from "@/constants/theme";
+import { BorderRadius, Spacing, Palette } from "@/constants/theme";
 import { sendEmergencyAlert } from "@/src/services/api/contacts";
 import { playEmergencyHaptic } from "@/src/services/feedback/haptics";
 import { speakEmergencyPrompt } from "@/src/services/feedback/voice";
@@ -33,6 +33,9 @@ export default function AlertScreen() {
 
   const dangerColor = useThemeColor({}, "danger");
   const dangerLight = useThemeColor({}, "dangerLight");
+  const cardAlt = useThemeColor({}, "cardAlt");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   useEffect(() => {
     if (getFallEvent().state === "IDLE") {
@@ -143,8 +146,9 @@ export default function AlertScreen() {
             Emergency Alert
           </ThemedText>
           <ThemedText type="caption" style={styles.subtitle}>
-            Dispatching SOS to your emergency contacts
+            Critical escalation is active. Dispatch control is armed.
           </ThemedText>
+          <StatusBadge state={event.state} />
         </View>
 
         {/* Dispatch Status Card */}
@@ -154,23 +158,27 @@ export default function AlertScreen() {
           success={hasDispatched}
         />
 
-        {/* Status Badge */}
-        <View style={styles.statusRow}>
-          <StatusBadge state={event.state} />
-        </View>
-
         {/* Location Info */}
         <Card variant="outlined" padding="md">
           <ThemedText type="label" style={styles.sectionLabel}>
-            Location Status
+            Tactical Feed
           </ThemedText>
-          <ThemedText type="caption">
-            {isDispatching
-              ? "Acquiring GPS coordinates..."
-              : hasDispatched
-                ? "Location data included in alert"
-                : "Location will be shared with emergency contacts"}
-          </ThemedText>
+          <View style={[styles.infoRow, { borderBottomColor: borderColor }]}> 
+            <ThemedText type="caption">GPS</ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.infoValue}>
+              {isDispatching
+                ? "Acquiring coordinates"
+                : hasDispatched
+                  ? "Attached to dispatch"
+                  : "Standby"}
+            </ThemedText>
+          </View>
+          <View style={styles.infoRow}>
+            <ThemedText type="caption">Emergency Contacts</ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.infoValue}>
+              {hasDispatched ? "Notified" : "Pending"}
+            </ThemedText>
+          </View>
         </Card>
 
         {/* Action Button */}
@@ -193,11 +201,17 @@ export default function AlertScreen() {
         </View>
 
         {/* Info Text */}
-        <ThemedText type="caption" style={styles.infoText}>
+        <Card
+          variant="glass"
+          padding="md"
+          style={[styles.noticeCard, { backgroundColor: cardAlt }]}
+        >
+          <ThemedText type="caption" style={[styles.infoText, { color: textSecondary }]}>
           {hasDispatched
-            ? "Your emergency contacts have been notified. Help is on the way."
-            : "Tap the button above to send an emergency alert with your location to all configured contacts."}
-        </ThemedText>
+            ? "Emergency sequence complete. Contacts have been notified."
+            : "Send the alert to notify all configured emergency contacts."}
+          </ThemedText>
+        </Card>
       </ScrollView>
     </ThemedView>
   );
@@ -217,19 +231,21 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     gap: Spacing.md,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.xl,
   },
   alertIconOuter: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(244, 240, 232, 0.25)",
   },
   alertIconInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -243,19 +259,32 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: "center",
-  },
-  statusRow: {
-    alignItems: "center",
+    maxWidth: 340,
+    lineHeight: 20,
   },
   sectionLabel: {
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  infoValue: {
+    textAlign: "right",
   },
   buttonsContainer: {
     paddingTop: Spacing.md,
   },
+  noticeCard: {
+    borderRadius: BorderRadius.md,
+  },
   infoText: {
     textAlign: "center",
-    opacity: 0.7,
-    paddingHorizontal: Spacing.lg,
+    lineHeight: 20,
+    opacity: 0.85,
   },
 });

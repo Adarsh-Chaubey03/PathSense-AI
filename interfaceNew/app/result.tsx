@@ -7,7 +7,7 @@ import { ThemedView } from "@/components/themed-view";
 import { Card, Button } from "@/components/ui";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
 import { useThemeColor } from "@/hooks/use-theme-color";
-import { Spacing, Palette } from "@/constants/theme";
+import { BorderRadius, Spacing, Palette } from "@/constants/theme";
 import {
   getFallEventTransitions,
   getFallEvent,
@@ -24,6 +24,8 @@ export default function ResultScreen() {
   const successLight = useThemeColor({}, "successLight");
   const accentColor = useThemeColor({}, "accent");
   const accentLight = useThemeColor({}, "accentLight");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   const isFalseAlarm = event.state === "FALSE_ALARM";
   const iconColor = isFalseAlarm ? accentColor : successColor;
@@ -74,28 +76,24 @@ export default function ResultScreen() {
           </ThemedText>
           <ThemedText type="caption" style={styles.subtitle}>
             {isFalseAlarm
-              ? "Great! We're glad you're okay."
-              : "Emergency contacts have been notified."}
+              ? "Clear confirmation recorded. Monitoring returns to standby."
+              : "Dispatch completed. Emergency contacts were notified."}
           </ThemedText>
-        </View>
-
-        {/* Status Badge */}
-        <View style={styles.statusRow}>
           <StatusBadge state={event.state} />
         </View>
 
         {/* Event Summary Card */}
         <Card variant="default" padding="lg">
           <ThemedText type="label" style={styles.cardLabel}>
-            Event Summary
+            Event Ledger
           </ThemedText>
-          <View style={styles.summaryRow}>
+          <View style={[styles.summaryRow, { borderBottomColor: borderColor }]}> 
             <ThemedText type="caption">Status</ThemedText>
             <ThemedText type="defaultSemiBold">
               {isFalseAlarm ? "Dismissed" : "Resolved"}
             </ThemedText>
           </View>
-          <View style={styles.summaryRow}>
+          <View style={[styles.summaryRow, { borderBottomColor: borderColor }]}> 
             <ThemedText type="caption">Transitions Logged</ThemedText>
             <ThemedText type="defaultSemiBold">{transitions.length}</ThemedText>
           </View>
@@ -110,9 +108,9 @@ export default function ResultScreen() {
         {/* Transition Log (collapsed) */}
         <Card variant="outlined" padding="md">
           <ThemedText type="label" style={styles.cardLabel}>
-            Activity Log
+            Timeline Extract
           </ThemedText>
-          <View style={styles.logContainer}>
+          <View style={[styles.logContainer, { borderColor }]}> 
             {transitions
               .slice(-5)
               .reverse()
@@ -122,7 +120,7 @@ export default function ResultScreen() {
                   type="caption"
                   style={styles.logItem}
                 >
-                  {t.to} - {t.reason}
+                  {t.to} // {t.reason}
                 </ThemedText>
               ))}
           </View>
@@ -140,7 +138,10 @@ export default function ResultScreen() {
         </View>
 
         {/* Info Text */}
-        <ThemedText type="caption" style={styles.infoText}>
+        <ThemedText
+          type="caption"
+          style={[styles.infoText, { color: textSecondary }]}
+        >
           PathSense will continue monitoring your safety. Stay safe!
         </ThemedText>
       </ScrollView>
@@ -162,19 +163,21 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     gap: Spacing.md,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.xl,
   },
   iconOuter: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
+    width: 92,
+    height: 92,
+    borderRadius: 46,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(244, 240, 232, 0.25)",
   },
   iconInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 66,
+    height: 66,
+    borderRadius: 33,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -188,9 +191,8 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     textAlign: "center",
-  },
-  statusRow: {
-    alignItems: "center",
+    maxWidth: 340,
+    lineHeight: 20,
   },
   cardLabel: {
     marginBottom: Spacing.md,
@@ -200,14 +202,18 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: Spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(155, 143, 228, 0.1)",
   },
   logContainer: {
     gap: Spacing.xs,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
   },
   logItem: {
     fontFamily: "monospace",
-    lineHeight: 18,
+    lineHeight: 17,
+    fontSize: 11,
+    opacity: 0.88,
   },
   buttonsContainer: {
     paddingTop: Spacing.md,

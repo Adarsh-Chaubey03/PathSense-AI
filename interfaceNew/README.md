@@ -1,3 +1,9 @@
+
+npm run android 
+
+for android start
+
+
 ## PathSense interfaceNew
 
 Expo Router app for live fall monitoring, confirmation flow, backend escalation, and demo-ready telemetry capture.
