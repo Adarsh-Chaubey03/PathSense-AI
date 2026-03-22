@@ -58,7 +58,7 @@ Teams **must disclose how API keys or credentials are obtained and handled**.
   - [ ] Backend-only (not exposed)
 - **Hardcoded in Repository**:
   - [ ] Yes
-  - [ ] No
+  - [X] No
 
   **Hardcoding API keys in public repositories will lead to disqualification.**
 
@@ -68,9 +68,15 @@ Teams **must disclose how API keys or credentials are obtained and handled**.
 
 List **all major libraries, frameworks, and SDKs** used.
 
-| Name           | Version | Purpose     | License |
-| -------------- | ------- | ----------- | ------- |
-| Example: React | 18.x    | Frontend UI | MIT     |
+| Name | Version | Purpose | License |
+| --- | --- | --- | --- |
+| React Native | 0.81.5 | Mobile application framework | MIT |
+| Node.js | >=20.0.0 | Backend runtime for API services | MIT |
+| Bun | >=1.0.0 | JavaScript runtime and backend dev server | MIT |
+| PyTorch | Not pinned in repo | ML model training and inference | BSD-3-Clause |
+| ONNX Runtime | >=1.22,<2 | Optimized model inference runtime | MIT |
+| Redis | Not specified | Location caching | Not specified |
+| VectorDB | Not specified | Efficient mapping and retrieval of data points | Not specified |
 
 ---
 
