@@ -21,6 +21,13 @@ interface AlertResult {
   smsResult: SMSResult;
 }
 
+export type AlertTarget = 'CONTACTS' | 'EMERGENCY';
+
+interface AlertDispatchOptions {
+  target: AlertTarget;
+  locationLink: string;
+}
+
 /**
  * Fetch emergency contacts from storage
  */
@@ -73,7 +80,79 @@ export async function send_alert_to_contacts(message: string): Promise<AlertResu
   return results;
 }
 
+function getEmergencyPhoneNumber(contacts: Contact[]): string | undefined {
+  const markedEmergencyContact = contacts.find(
+    (contact) => (contact as Contact & { isEmergency?: boolean }).isEmergency === true,
+  );
+
+  if (markedEmergencyContact?.phone) {
+    return markedEmergencyContact.phone;
+  }
+
+  const envEmergencyNumber = process.env.EMERGENCY_PHONE_NUMBER?.trim();
+  if (envEmergencyNumber && envEmergencyNumber.length > 0) {
+    return envEmergencyNumber;
+  }
+
+  return '108';
+}
+
+function buildMessageWithLocation(message: string, locationLink: string): string {
+  return `${message}\nLocation: ${locationLink}`;
+}
+
+export async function send_alert_by_priority(
+  message: string,
+  options: AlertDispatchOptions,
+): Promise<AlertResult[]> {
+  const contacts = getContacts();
+  const smsBody = buildMessageWithLocation(message, options.locationLink);
+  const results: AlertResult[] = [];
+
+  if (options.target === 'CONTACTS') {
+    if (contacts.length === 0) {
+      console.warn('[ContactManager] CONTACTS action requested but no contacts configured');
+      return [];
+    }
+
+    for (const contact of contacts) {
+      const smsResult = await sendSMS(contact.phone, smsBody);
+      results.push({ contact, smsResult });
+    }
+
+    return results;
+  }
+
+  // EMERGENCY target: all contacts + emergency number fallback/override.
+  const emergencyNumber = getEmergencyPhoneNumber(contacts);
+  const recipientsByPhone = new Map<string, Contact>();
+
+  for (const contact of contacts) {
+    recipientsByPhone.set(contact.phone, contact);
+  }
+
+  if (emergencyNumber) {
+    recipientsByPhone.set(emergencyNumber, {
+      name: 'Emergency Services',
+      phone: emergencyNumber,
+    });
+  }
+
+  if (recipientsByPhone.size === 0) {
+    console.warn('[ContactManager] EMERGENCY action requested but no recipients configured');
+    return [];
+  }
+
+  for (const recipient of recipientsByPhone.values()) {
+    const smsResult = await sendSMS(recipient.phone, smsBody);
+    results.push({ contact: recipient, smsResult });
+  }
+
+  return results;
+}
+
 export default {
+  send_alert_by_priority,
   send_alert_to_contacts,
   getContacts,
 };

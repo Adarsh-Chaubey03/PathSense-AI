@@ -1,0 +1,65 @@
+[
+  {
+    "eventId": "evt-help-high",
+    "createdAt": "2026-03-22T05:23:10.855Z",
+    "status": "CONFIRMED",
+    "sosTriggered": true,
+    "dispatch": {
+      "attempted": true,
+      "success": true,
+      "recipientsTotal": 1,
+      "recipientsSucceeded": 1,
+      "decision": "EMERGENCY",
+      "responseType": "NEGATIVE",
+      "modelScore": 0.9,
+      "responseWeight": 1,
+      "finalScore": 0.96,
+      "ttsMessage": "Emergency services contacted",
+      "smsStatus": "SENT"
+    },
+    "request": {
+      "eventId": "evt-help-high",
+      "timestampMs": 1774156990851,
+      "motionState": "unstable",
+      "accelerometer": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "gyroscope": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      },
+      "accelMagnitude": 0,
+      "gyroMagnitude": 0,
+      "sampleRateHz": 50,
+      "source": "mock",
+      "snapshot": [
+        {
+          "timestampMs": 1774156990851,
+          "accelerometer": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "gyroscope": {
+            "x": 0,
+            "y": 0,
+            "z": 0
+          },
+          "accelMagnitude": 0,
+          "gyroMagnitude": 0,
+          "motionScore": 0.9,
+          "orientationChange": true,
+          "motionState": "unstable",
+          "sampleRateHz": 50,
+          "source": "mock"
+        }
+      ],
+      "motionScore": 0.9,
+      "orientationChange": true,
+      "transcript": "help"
+    }
+  }
+]

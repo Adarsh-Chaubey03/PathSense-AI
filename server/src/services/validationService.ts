@@ -3,27 +3,27 @@ import type {
   FallStatus,
   FallEventRequest,
   FallEventResponse,
+  PriorityDecision,
+  ResponseType,
   ValidationResult,
 } from '../types/fall.ts';
-import { send_alert_to_contacts } from './contactManager.ts';
+import { send_alert_by_priority } from './contactManager.ts';
 import { appendFallEvent } from './fallEventStore.ts';
 
-const CONFIRMATION_TIMEOUT_MS = 5000;
+const POSITIVE_RESPONSES = ['yes', 'okay', 'ok', 'i am fine', 'fine', 'all good'];
+const NEGATIVE_RESPONSES = ['no', 'help', 'not okay', 'hurt', 'pain', 'emergency'];
 
-const POSITIVE_RESPONSES = [
-  'yes',
-  'yeah',
-  'yep',
-  'i am fine',
-  "i'm fine",
-  'i am okay',
-  "i'm okay",
-  'all good',
-  'no problem',
-  'fine',
-  'okay',
-  'ok',
-];
+const RESPONSE_WEIGHTS: Record<ResponseType, number> = {
+  POSITIVE: -1.0,
+  NEGATIVE: 1.0,
+  NONE: 0.6,
+};
+
+const DECISION_TTS: Record<PriorityDecision, string> = {
+  CANCEL: 'Alert cancelled',
+  CONTACTS: 'Alert sent to contacts',
+  EMERGENCY: 'Emergency services contacted',
+};
 
 /**
  * Validates a fall event based on motion score and orientation change.
@@ -40,46 +40,172 @@ export function validateFall(motionScore: number, orientationChange: boolean): V
   return { status: 'UNCERTAIN' };
 }
 
-function isUserOkay(transcript: string | undefined): boolean {
-  if (!transcript || transcript.trim().length === 0) {
-    return false;
+function normalizeTranscript(transcript: string | undefined): string {
+  if (!transcript) {
+    return '';
   }
 
-  const normalizedTranscript = transcript.toLowerCase().trim();
-
-  // Check for negation patterns that override positive responses
-  const negationPatterns = [/\bnot\s+okay\b/, /\bnot\s+fine\b/, /\bnot\s+ok\b/, /n't\s+okay\b/, /n't\s+fine\b/, /n't\s+ok\b/, /\bhelp\b/, /\bneed\s+help\b/, /\bhurt\b/, /\bpain\b/, /\bfell\b/, /\bfallen\b/];
-  if (negationPatterns.some((pattern) => pattern.test(normalizedTranscript))) {
-    return false;
-  }
-
-  return POSITIVE_RESPONSES.some((response) => normalizedTranscript.includes(response));
+  return transcript
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-async function waitForUserConfirmation(transcript?: string): Promise<string | undefined> {
-  if (transcript !== undefined) {
-    return transcript;
+function classifyResponse(normalizedTranscript: string): ResponseType {
+  if (normalizedTranscript.length === 0) {
+    return 'NONE';
   }
 
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve(undefined);
-    }, CONFIRMATION_TIMEOUT_MS);
+  // Critical ordering: detect "not okay" before generic "okay".
+  if (normalizedTranscript.includes('not okay')) {
+    return 'NEGATIVE';
+  }
+
+  if (NEGATIVE_RESPONSES.some((phrase) => normalizedTranscript.includes(phrase))) {
+    return 'NEGATIVE';
+  }
+
+  if (POSITIVE_RESPONSES.some((phrase) => normalizedTranscript.includes(phrase))) {
+    return 'POSITIVE';
+  }
+
+  return 'NONE';
+}
+
+function calculateFinalScore(modelScore: number, responseType: ResponseType): {
+  responseWeight: number;
+  finalScore: number;
+} {
+  const responseWeight = RESPONSE_WEIGHTS[responseType];
+  const finalScore = modelScore * 0.4 + responseWeight * 0.6;
+
+  return { responseWeight, finalScore };
+}
+
+function decideAction(responseType: ResponseType, finalScore: number, modelScore: number): PriorityDecision {
+  if (responseType === 'POSITIVE') {
+    return 'CANCEL';
+  }
+
+  // Negative response is always treated as a high-priority emergency signal.
+  if (responseType === 'NEGATIVE') {
+    return 'EMERGENCY';
+  }
+
+  // With no response, a very high model score escalates directly to emergency.
+  if (responseType === 'NONE' && modelScore >= 0.85) {
+    return 'EMERGENCY';
+  }
+
+  if (finalScore >= 0.85) {
+    return 'EMERGENCY';
+  }
+
+  if (finalScore >= 0.5) {
+    return 'CONTACTS';
+  }
+
+  return 'CANCEL';
+}
+
+function mapDecisionToStatus(decision: PriorityDecision): FallStatus {
+  if (decision === 'EMERGENCY') {
+    return 'CONFIRMED';
+  }
+
+  if (decision === 'CONTACTS') {
+    return 'UNCERTAIN';
+  }
+
+  return 'REJECTED';
+}
+
+function resolveLocationLink(request: FallEventRequest): string {
+  if (request.locationLink && request.locationLink.trim().length > 0) {
+    return request.locationLink.trim();
+  }
+
+  if (request.location && Number.isFinite(request.location.latitude) && Number.isFinite(request.location.longitude)) {
+    return `https://maps.google.com/?q=${request.location.latitude},${request.location.longitude}`;
+  }
+
+  const fallbackLink = process.env.DEFAULT_LOCATION_LINK?.trim();
+  if (fallbackLink && fallbackLink.length > 0) {
+    return fallbackLink;
+  }
+
+  return 'https://maps.google.com/?q=0,0';
+}
+
+async function executeDecisionAction(
+  request: FallEventRequest,
+  decision: PriorityDecision,
+  responseType: ResponseType,
+  modelScore: number,
+  responseWeight: number,
+  finalScore: number,
+): Promise<FallDispatchSummary> {
+  const ttsMessage = DECISION_TTS[decision];
+
+  if (decision === 'CANCEL') {
+    return {
+      attempted: false,
+      success: false,
+      recipientsTotal: 0,
+      recipientsSucceeded: 0,
+      decision,
+      responseType,
+      modelScore,
+      responseWeight,
+      finalScore,
+      ttsMessage,
+      smsStatus: 'NOT_SENT',
+    };
+  }
+
+  const locationLink = resolveLocationLink(request);
+  const message =
+    decision === 'EMERGENCY'
+      ? 'EMERGENCY ALERT: Possible fall detected. Immediate assistance required.'
+      : 'ALERT: Possible fall detected. Please check immediately.';
+
+  const alertResults = await send_alert_by_priority(message, {
+    target: decision,
+    locationLink,
   });
-}
-
-async function triggerSOS(): Promise<FallDispatchSummary> {
-  const message = 'EMERGENCY ALERT: Possible fall detected. Immediate assistance required.';
-  const alertResults = await send_alert_to_contacts(message);
 
   const recipientsTotal = alertResults.length;
   const recipientsSucceeded = alertResults.filter((result) => result.smsResult.success).length;
+  const success = recipientsSucceeded > 0;
+  const smsStatus =
+    recipientsTotal === 0
+      ? 'FAILED'
+      : recipientsSucceeded === recipientsTotal
+        ? 'SENT'
+        : recipientsSucceeded > 0
+          ? 'PARTIAL'
+          : 'FAILED';
+
+  console.log('[FallEvent] SMS sent status:', {
+    decision,
+    recipientsTotal,
+    recipientsSucceeded,
+    smsStatus,
+  });
 
   return {
     attempted: recipientsTotal > 0,
-    success: recipientsSucceeded > 0,
+    success,
     recipientsTotal,
     recipientsSucceeded,
+    decision,
+    responseType,
+    modelScore,
+    responseWeight,
+    finalScore,
+    ttsMessage,
+    smsStatus,
   };
 }
 
@@ -89,36 +215,34 @@ async function triggerSOS(): Promise<FallDispatchSummary> {
 export async function handleFallEvent(request: FallEventRequest): Promise<FallEventResponse> {
   const { motionScore, orientationChange, transcript } = request;
 
-  const validationResult = validateFall(motionScore, orientationChange);
-  let finalStatus: FallStatus = validationResult.status;
-  let sosTriggered = false;
-  let dispatch: FallDispatchSummary = {
-    attempted: false,
-    success: false,
-    recipientsTotal: 0,
-    recipientsSucceeded: 0,
-  };
+  // Preserve existing validation utility to keep model-side consistency checks available.
+  validateFall(motionScore, orientationChange);
 
-  console.log('[FallEvent] Validation result:', validationResult.status);
+  const modelScore = motionScore;
+  const rawTranscript = transcript ?? '';
+  const normalizedTranscript = normalizeTranscript(rawTranscript);
+  const responseType = classifyResponse(normalizedTranscript);
+  const { responseWeight, finalScore } = calculateFinalScore(modelScore, responseType);
+  const decision = decideAction(responseType, finalScore, modelScore);
+  const finalStatus: FallStatus = mapDecisionToStatus(decision);
 
-  if (finalStatus === 'UNCERTAIN') {
-    const userResponse = await waitForUserConfirmation(transcript);
-    console.log('[FallEvent] Transcript received:', userResponse || '(empty)');
+  console.log('[FallEvent] modelScore:', modelScore);
+  console.log('[FallEvent] transcript raw:', rawTranscript || '(empty)');
+  console.log('[FallEvent] transcript normalized:', normalizedTranscript || '(empty)');
+  console.log('[FallEvent] response type:', responseType);
+  console.log('[FallEvent] finalScore:', Number(finalScore.toFixed(3)));
+  console.log('[FallEvent] decision:', decision);
 
-    if (isUserOkay(userResponse)) {
-      finalStatus = 'REJECTED';
-      console.log('[FallEvent] Decision: User is okay, canceling SOS');
-    } else {
-      finalStatus = 'CONFIRMED';
-      console.log('[FallEvent] Decision: User needs help, triggering SOS');
-    }
-  }
+  const dispatch = await executeDecisionAction(
+    request,
+    decision,
+    responseType,
+    modelScore,
+    responseWeight,
+    finalScore,
+  );
 
-  if (finalStatus === 'CONFIRMED') {
-    dispatch = await triggerSOS();
-    sosTriggered = dispatch.success;
-    console.log(`[FallEvent] SOS ${sosTriggered ? 'triggered' : 'failed'}`);
-  }
+  const sosTriggered = decision !== 'CANCEL' && dispatch.success;
 
   appendFallEvent({
     eventId: request.eventId,
