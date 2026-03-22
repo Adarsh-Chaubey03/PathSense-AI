@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "expo-router";
 import { StyleSheet, TouchableOpacity } from "react-native";
 
@@ -7,10 +7,16 @@ import { ThemedView } from "@/components/themed-view";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
 import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
 import { services } from "@/src/services";
+import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
+import {
+  postFallDetectWithRetry,
+  type FallDetectResult,
+} from "@/src/services/api/fall-events";
 import {
   getFallEvent,
   resetFallEvent,
   transitionFallEvent,
+  setMLDetectionResult,
 } from "@/src/state/fall-event-store";
 import { useFallEvent } from "@/src/state/use-fall-event";
 import {
@@ -24,7 +30,13 @@ export default function MonitoringScreen() {
   const event = useFallEvent();
   const [sample, setSample] = useState<SensorSample | null>(null);
   const [edgeStatus, setEdgeStatus] = useState<DetectionDecision | null>(null);
+  const [bufferFill, setBufferFill] = useState(0);
+  const [apiStatus, setApiStatus] = useState<string | null>(null);
 
+  // Prevent concurrent API calls
+  const isProcessingRef = useRef(false);
+
+  // Define routeToConfirmation first (no dependencies on other callbacks)
   const routeToConfirmation = useCallback((reason: string) => {
     const { state } = getFallEvent();
 
@@ -53,25 +65,101 @@ export default function MonitoringScreen() {
     router.push("./confirm");
   }, [router]);
 
+  // storeMLResultAndNavigate depends on routeToConfirmation
+  const storeMLResultAndNavigate = useCallback((
+    result: FallDetectResult,
+    fallProb: number,
+    falseProb: number,
+    sampleCount: number,
+    reason: string,
+  ): void => {
+    // Store the ML detection result
+    setMLDetectionResult({
+      result,
+      fallProbability: fallProb,
+      falseProbability: falseProb,
+      sampleCount,
+      triggeredAt: new Date().toISOString(),
+    });
+
+    // Only navigate to confirmation for REAL_FALL
+    if (result === "REAL_FALL") {
+      routeToConfirmation(reason);
+    } else {
+      // For FALSE_ALARM or NO_FALL, reset and continue monitoring
+      setApiStatus(`ML determined: ${result} - continuing monitoring`);
+      resetEdgeFilter();
+    }
+  }, [routeToConfirmation]);
+
+  // processMLDetection depends on storeMLResultAndNavigate
+  const processMLDetection = useCallback(async (reason: string): Promise<void> => {
+    // Prevent concurrent processing
+    if (isProcessingRef.current) {
+      return;
+    }
+    isProcessingRef.current = true;
+
+    try {
+      // 1. Extract the 2-second buffer window (safe snapshot)
+      const window = sensorWindowStore.getWindowForML();
+      const sampleCount = window.length;
+
+      if (sampleCount < 50) {
+        setApiStatus(`Insufficient data: ${sampleCount} samples (need 50+)`);
+        isProcessingRef.current = false;
+        return;
+      }
+
+      setApiStatus(`Sending ${sampleCount} samples to ML API...`);
+
+      // 2. Call the ML backend API
+      const response = await postFallDetectWithRetry(window);
+
+      if (!response) {
+        setApiStatus("ML API failed - treating as potential fall");
+        // On API failure, default to showing confirmation (safety first)
+        storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, sampleCount, reason);
+        return;
+      }
+
+      // 3. Store ML result and handle based on response
+      const { result, fall_prob, false_prob } = response;
+      setApiStatus(`ML result: ${result} (fall: ${(fall_prob * 100).toFixed(1)}%)`);
+
+      storeMLResultAndNavigate(result, fall_prob, false_prob, sampleCount, reason);
+    } catch {
+      setApiStatus("Error processing fall detection");
+      // On error, default to showing confirmation (safety first)
+      storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, 0, reason);
+    } finally {
+      isProcessingRef.current = false;
+    }
+  }, [storeMLResultAndNavigate]);
+
   const handleSensorSample = useCallback(
     (newSample: SensorSample) => {
       setSample(newSample);
+
+      // Update buffer fill indicator
+      setBufferFill(sensorWindowStore.getBufferFillPercent());
 
       // Process sample through edge AI filter
       const decision = evaluateWithEdgeFilter(newSample);
       setEdgeStatus(decision);
 
-      // Edge-filter responsibility: route to confirmation UI on spikes.
+      // Edge-filter responsibility: when spike detected, extract buffer and call ML API
       if (decision.shouldEscalateCandidate) {
-        routeToConfirmation("Edge filter detected a potential fall");
+        void processMLDetection("Edge filter detected a potential fall");
       }
     },
-    [routeToConfirmation],
+    [processMLDetection],
   );
 
   useEffect(() => {
-    // Reset edge filter when monitoring starts
+    // Reset edge filter and clear buffer when monitoring starts
     resetEdgeFilter();
+    sensorWindowStore.clear();
 
     // Start sensor monitoring
     services.sensorAdapter.start(handleSensorSample);
@@ -112,6 +200,15 @@ export default function MonitoringScreen() {
       transitionFallEvent("CONFIRMING", "Move to confirmation stage");
     }
 
+    // Store mock ML result for simulation
+    setMLDetectionResult({
+      result: "REAL_FALL",
+      fallProbability: 0.85,
+      falseProbability: 0.15,
+      sampleCount: sensorWindowStore.getSampleCount(),
+      triggeredAt: new Date().toISOString(),
+    });
+
     router.push("./confirm");
   };
 
@@ -128,6 +225,9 @@ export default function MonitoringScreen() {
           ? `motion ${sample.motionScore.toFixed(2)} | accel ${sample.accelMagnitude.toFixed(2)} m/s² | gyro ${sample.gyroMagnitude.toFixed(2)} rad/s | ${sample.motionState}`
           : "waiting..."}
       </ThemedText>
+      <ThemedText style={styles.bufferStatus}>
+        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()}/100 samples)
+      </ThemedText>
       <ThemedText style={styles.edgeStatus}>
         Edge filter:{" "}
         {edgeStatus
@@ -140,6 +240,11 @@ export default function MonitoringScreen() {
           max={edgeStatus.windowStats.maxAccG.toFixed(2)}g |
           gyro={edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s |
           samples={edgeStatus.windowStats.sampleCount}
+        </ThemedText>
+      )}
+      {apiStatus && (
+        <ThemedText style={styles.apiStatus}>
+          ML API: {apiStatus}
         </ThemedText>
       )}
       <TouchableOpacity onPress={handleSimulateCandidate} style={styles.link}>
@@ -159,6 +264,12 @@ const styles = StyleSheet.create({
   body: {
     lineHeight: 22,
   },
+  bufferStatus: {
+    lineHeight: 20,
+    fontSize: 12,
+    opacity: 0.9,
+    color: "#4CAF50",
+  },
   edgeStatus: {
     lineHeight: 20,
     fontSize: 12,
@@ -169,6 +280,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     opacity: 0.6,
     fontFamily: "monospace",
+  },
+  apiStatus: {
+    lineHeight: 20,
+    fontSize: 12,
+    opacity: 0.9,
+    color: "#2196F3",
   },
   link: {
     marginTop: 12,

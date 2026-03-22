@@ -1,0 +1,16 @@
+Server listening on http://localhost:4000
+[FallDetect] Received request with window shape: 100x6
+[FallDetect] Window validated. First sample: [ -0.035156, -1.003906, -0.097656, 5.843478,
+  17.182609, 1.878261
+]
+[FallDetect] Last sample: [ -0.160156, -1.464844, 0.015625, -18.086957, 4.591304,
+  46.4
+]
+[FallDetect] Sending to Python ML worker...
+[FallDetect] ML Response: {
+  "fall_prob": 0.998507,
+  "false_prob": 0.351263,
+  "result": "REAL_FALL"
+}
+[FallDetect] SUCCESS - Result: REAL_FALL | Fall prob: 99.9% | False prob: 35.1%
+[0mPOST /api/fall-detect [32m200[0m 4091.656 ms - 65[0m

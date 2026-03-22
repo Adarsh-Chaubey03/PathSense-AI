@@ -11,6 +11,7 @@ import type {
   SensorSample,
   SensorVector,
 } from "@/src/services/sensors/sensor-adapter";
+import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
 
 const DEFAULT_SAMPLE_RATE_HZ = 50;
 const GRAVITY_EARTH = 9.81;
@@ -119,6 +120,16 @@ export class RealSensorAdapter implements SensorAdapter {
     if (!sample) {
       return;
     }
+
+    // Feed the circular buffer for ML API (runs continuously, independent of edge-filter)
+    sensorWindowStore.addSample(
+      sample.accelerometer.x,
+      sample.accelerometer.y,
+      sample.accelerometer.z,
+      sample.gyroscope.x,
+      sample.gyroscope.y,
+      sample.gyroscope.z,
+    );
 
     this.pushSample(sample);
     onSample(sample);

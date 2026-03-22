@@ -2,6 +2,7 @@ import type {
   SensorAdapter,
   SensorSample,
 } from "@/src/services/sensors/sensor-adapter";
+import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
 
 // Fall simulation phases
 type FallPhase = "normal" | "freefall" | "impact" | "recovery";
@@ -195,6 +196,16 @@ export class MockSensorAdapter implements SensorAdapter {
         sampleRateHz: 20,
         source: "mock",
       };
+
+      // Feed the circular buffer for ML API (runs continuously, independent of edge-filter)
+      sensorWindowStore.addSample(
+        sample.accelerometer.x,
+        sample.accelerometer.y,
+        sample.accelerometer.z,
+        sample.gyroscope.x,
+        sample.gyroscope.y,
+        sample.gyroscope.z,
+      );
 
       this.pushSample(sample);
       onSample(sample);

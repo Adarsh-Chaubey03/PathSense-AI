@@ -6,6 +6,7 @@ import {
   FallEventContext,
   FallEventState,
   FallEventTransition,
+  MLDetectionData,
 } from "@/src/features/fall-event/event.types";
 import { getJSON, setJSON } from "@/src/services/storage/local-store";
 import { STORAGE_KEYS } from "@/src/services/storage/storage-keys";
@@ -84,4 +85,28 @@ export function subscribeToFallEvent(
       listeners.splice(index, 1);
     }
   };
+}
+
+export function setMLDetectionResult(mlData: MLDetectionData): void {
+  currentEvent = {
+    ...currentEvent,
+    mlDetection: mlData,
+    updatedAt: new Date().toISOString(),
+  };
+  void persistSnapshot();
+  notify();
+}
+
+export function getMLDetectionResult(): MLDetectionData | undefined {
+  return currentEvent.mlDetection;
+}
+
+export function clearMLDetectionResult(): void {
+  const { mlDetection, ...rest } = currentEvent;
+  currentEvent = {
+    ...rest,
+    updatedAt: new Date().toISOString(),
+  };
+  void persistSnapshot();
+  notify();
 }
