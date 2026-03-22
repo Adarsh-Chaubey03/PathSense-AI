@@ -61,5 +61,68 @@
       "orientationChange": true,
       "transcript": "help"
     }
+  },
+  {
+    "eventId": "evt-smoke-1774161896235",
+    "createdAt": "2026-03-22T06:44:56.241Z",
+    "status": "REJECTED",
+    "sosTriggered": false,
+    "dispatch": {
+      "attempted": false,
+      "success": false,
+      "recipientsTotal": 0,
+      "recipientsSucceeded": 0,
+      "decision": "CANCEL",
+      "responseType": "POSITIVE",
+      "modelScore": 0,
+      "responseWeight": 0,
+      "finalScore": 0,
+      "ttsMessage": "",
+      "smsStatus": "NOT_SENT"
+    },
+    "request": {
+      "eventId": "evt-smoke-1774161896235",
+      "timestampMs": 1774161896235,
+      "motionState": "unstable",
+      "accelerometer": {
+        "x": 0.11,
+        "y": -0.22,
+        "z": 9.81
+      },
+      "gyroscope": {
+        "x": 0.01,
+        "y": 0.02,
+        "z": 0.03
+      },
+      "accelMagnitude": 9.81,
+      "gyroMagnitude": 0.04,
+      "sampleRateHz": 50,
+      "source": "real",
+      "snapshot": [
+        {
+          "timestampMs": 1774161896235,
+          "accelerometer": {
+            "x": 0.11,
+            "y": -0.22,
+            "z": 9.81
+          },
+          "gyroscope": {
+            "x": 0.01,
+            "y": 0.02,
+            "z": 0.03
+          },
+          "accelMagnitude": 9.81,
+          "gyroMagnitude": 0.04,
+          "motionScore": 0.1,
+          "orientationChange": true,
+          "motionState": "unstable",
+          "sampleRateHz": 50,
+          "source": "real"
+        }
+      ],
+      "motionScore": 0.1,
+      "orientationChange": true,
+      "transcript": "i am fine"
+    }
   }
 ]

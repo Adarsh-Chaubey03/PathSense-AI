@@ -1,37 +1,57 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'expo-router';
-import { ScrollView, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useState, useCallback, useRef } from "react";
+import { useRouter } from "expo-router";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Card, Button, InfoCard } from '@/components/ui';
-import { StatusBadge } from '@/src/components/common/StatusBadge';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { Spacing, BorderRadius, Palette } from '@/constants/theme';
-import type { SensorSample } from '@/src/services/sensors/sensor-adapter';
-import { services } from '@/src/services';
-import { sensorWindowStore } from '@/src/services/sensors/sensor-window-store';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Button, Card } from "@/components/ui";
+import { BorderRadius, Spacing } from "@/constants/theme";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
+import { services } from "@/src/services";
+import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
 import {
   postFallDetectWithRetry,
+  getHealth,
   type FallDetectResult,
-} from '@/src/services/api/fall-events';
-import { getApiBaseUrl } from '@/src/services/api/client';
+} from "@/src/services/api/fall-events";
+import { getApiBaseUrl } from "@/src/services/api/client";
 import {
   getFallEvent,
   resetFallEvent,
   transitionFallEvent,
   setMLDetectionResult,
-} from '@/src/state/fall-event-store';
-import { useFallEvent } from '@/src/state/use-fall-event';
+} from "@/src/state/fall-event-store";
+import { useFallEvent } from "@/src/state/use-fall-event";
 import {
   evaluateWithEdgeFilter,
   getEdgeFilterThresholds,
   resetEdgeFilter,
   type DetectionDecision,
-} from '@/src/features/fall-event/detection';
+} from "@/src/features/fall-event/detection";
+import {
+  buildSafeSignalKeyFromSample,
+  isSafeSignalKeyCached,
+} from "@/src/services/storage/safe-fall-cache";
 
 const EDGE_THRESHOLDS = getEdgeFilterThresholds();
+
+function isValidFallResult(result: unknown): result is FallDetectResult {
+  return (
+    result === "REAL_FALL" || result === "FALSE_ALARM" || result === "NO_FALL"
+  );
+}
+
+function isValidProbability(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  );
+}
 
 export default function MonitoringScreen() {
   const router = useRouter();
@@ -44,12 +64,16 @@ export default function MonitoringScreen() {
   const [monitoringLogs, setMonitoringLogs] = useState<string[]>([]);
   const apiBaseUrl = getApiBaseUrl();
 
-  const successColor = useThemeColor({}, 'success');
-  const primaryColor = useThemeColor({}, 'primary');
-  const accentColor = useThemeColor({}, 'accent');
-  const warningColor = useThemeColor({}, 'warning');
-  const cardBg = useThemeColor({}, 'card');
+  const primaryColor = useThemeColor({}, "primary");
+  const successColor = useThemeColor({}, "success");
+  const warningColor = useThemeColor({}, "warning");
+  const dangerColor = useThemeColor({}, "danger");
+  const accentColor = useThemeColor({}, "accent");
+  const cardAlt = useThemeColor({}, "cardAlt");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
+  // Prevent concurrent API calls
   const isProcessingRef = useRef(false);
   const inTriggerRangeRef = useRef(false);
 
@@ -59,74 +83,96 @@ export default function MonitoringScreen() {
     setMonitoringLogs((prev) => [...prev.slice(-79), entry]);
   }, []);
 
+  // Define routeToConfirmation first (no dependencies on other callbacks)
   const routeToConfirmation = useCallback(
     (reason: string) => {
       const { state } = getFallEvent();
 
       if (
-        state !== 'IDLE' &&
-        state !== 'MONITORING' &&
-        state !== 'CANDIDATE' &&
-        state !== 'CONFIRMING'
+        state !== "IDLE" &&
+        state !== "MONITORING" &&
+        state !== "CANDIDATE" &&
+        state !== "CONFIRMING"
       ) {
         resetFallEvent();
-        transitionFallEvent('MONITORING', 'Reset stale flow before ML-confirmed fall');
+        transitionFallEvent(
+          "MONITORING",
+          "Reset stale flow before ML-confirmed fall",
+        );
       }
 
-      if (state === 'IDLE') {
-        transitionFallEvent('MONITORING', 'Edge filter activated monitoring');
+      if (state === "IDLE") {
+        transitionFallEvent("MONITORING", "Edge filter activated monitoring");
       }
 
-      if (getFallEvent().state === 'MONITORING') {
-        transitionFallEvent('CANDIDATE', 'Edge AI detected potential fall pattern');
+      if (getFallEvent().state === "MONITORING") {
+        transitionFallEvent(
+          "CANDIDATE",
+          "Edge AI detected potential fall pattern",
+        );
       }
 
-      if (getFallEvent().state === 'CANDIDATE') {
-        transitionFallEvent('CONFIRMING', reason);
+      if (getFallEvent().state === "CANDIDATE") {
+        transitionFallEvent("CONFIRMING", reason);
       }
 
-      router.push('./confirm');
+      router.push("./confirm");
     },
-    [router]
+    [router],
   );
 
+  // storeMLResultAndNavigate depends on routeToConfirmation
   const storeMLResultAndNavigate = useCallback(
     (
       result: FallDetectResult,
       fallProb: number,
       falseProb: number,
       sampleCount: number,
-      reason: string
+      reason: string,
+      safeSignalKey?: string,
     ): void => {
+      // Store the ML detection result
       setMLDetectionResult({
         result,
         fallProbability: fallProb,
         falseProbability: falseProb,
         sampleCount,
         triggeredAt: new Date().toISOString(),
+        safeSignalKey,
       });
 
-      if (result === 'REAL_FALL') {
-        appendMonitoringLog('Backend confirmed REAL_FALL -> opening Are you OK page');
+      // Only navigate to confirmation for REAL_FALL
+      if (result === "REAL_FALL") {
+        appendMonitoringLog(
+          "Backend confirmed REAL_FALL -> opening Are you OK page",
+        );
         routeToConfirmation(reason);
       } else {
+        // For FALSE_ALARM or NO_FALL, reset and continue monitoring
         setApiStatus(`ML determined: ${result} - continuing monitoring`);
-        appendMonitoringLog(`Backend result ${result} -> staying on monitoring and resetting edge filter`);
+        appendMonitoringLog(
+          `Backend result ${result} -> staying on monitoring and resetting edge filter`,
+        );
         resetEdgeFilter();
       }
     },
-    [appendMonitoringLog, routeToConfirmation]
+    [appendMonitoringLog, routeToConfirmation],
   );
 
+  // processMLDetection depends on storeMLResultAndNavigate
   const processMLDetection = useCallback(
-    async (reason: string): Promise<void> => {
+    async (reason: string, triggerSample: SensorSample): Promise<void> => {
+      // Prevent concurrent processing
       if (isProcessingRef.current) {
-        appendMonitoringLog('ML API call skipped: previous request still in progress');
+        appendMonitoringLog(
+          "ML API call skipped: previous request still in progress",
+        );
         return;
       }
       isProcessingRef.current = true;
 
       try {
+        // 1. Extract the 2-second buffer window (safe snapshot)
         const windowPayload = sensorWindowStore.getWindowForApiCall();
         const window = sensorWindowStore.getWindowForML();
         const sampleCount = window.length;
@@ -134,17 +180,43 @@ export default function MonitoringScreen() {
         const targetWindowSize = sensorWindowStore.getTargetWindowSize();
 
         if (!windowPayload || sampleCount !== targetWindowSize) {
-          setApiStatus(`Insufficient window: ${bufferedSamples}/${targetWindowSize}`);
+          setApiStatus(
+            `Insufficient 2s window: buffered=${bufferedSamples}, normalized=${sampleCount}, need=${targetWindowSize}`,
+          );
           appendMonitoringLog(
-            `ML API not called: window not ready (${bufferedSamples}/${targetWindowSize})`
+            `ML API not called: 2s pre-fall window not ready (buffered=${bufferedSamples}, normalized=${sampleCount}/${targetWindowSize})`,
           );
           isProcessingRef.current = false;
           return;
         }
 
-        setApiStatus(`Analyzing ${sampleCount} samples...`);
-        appendMonitoringLog(`Trigger API call: window=${sampleCount}x6`);
+        const safeSignalKey = buildSafeSignalKeyFromSample(triggerSample);
+        const shouldSuppressApiCall =
+          await isSafeSignalKeyCached(safeSignalKey);
+        if (shouldSuppressApiCall) {
+          setApiStatus(
+            "Safe cache matched - skipping ML API and continuing monitoring",
+          );
+          appendMonitoringLog(
+            `Safe cache hit for signal ${safeSignalKey}; suppressing /fall-detect call`,
+          );
+          storeMLResultAndNavigate(
+            "NO_FALL",
+            0,
+            0,
+            sampleCount,
+            reason,
+            safeSignalKey,
+          );
+          return;
+        }
 
+        setApiStatus(`Sending ${sampleCount} samples to ML API...`);
+        appendMonitoringLog(
+          `Trigger API call: window=${sampleCount}x6, duration=${windowPayload.windowEndMs - windowPayload.windowStartMs}ms`,
+        );
+
+        // 2. Call the ML backend API
         const response = await postFallDetectWithRetry({
           window,
           sampleCount: windowPayload.sampleCount,
@@ -160,35 +232,80 @@ export default function MonitoringScreen() {
         });
 
         if (!response) {
-          setApiStatus('ML API failed - treating as potential fall');
-          appendMonitoringLog('ML API call failed; fallback REAL_FALL flow applied');
-          storeMLResultAndNavigate('REAL_FALL', 0.5, 0.5, sampleCount, reason);
+          setApiStatus("ML API unavailable - continuing monitoring");
+          appendMonitoringLog(
+            "ML API call failed after retries; suppressing escalation and continuing monitoring",
+          );
+          storeMLResultAndNavigate(
+            "NO_FALL",
+            0,
+            0,
+            sampleCount,
+            reason,
+            safeSignalKey,
+          );
           return;
         }
 
+        // 3. Store ML result and handle based on response
         const { result, fall_prob, false_prob } = response;
-        setApiStatus(`Result: ${result} (${(fall_prob * 100).toFixed(0)}%)`);
+
+        if (
+          !isValidFallResult(result) ||
+          !isValidProbability(fall_prob) ||
+          !isValidProbability(false_prob)
+        ) {
+          setApiStatus("Invalid ML API response - continuing monitoring");
+          appendMonitoringLog(
+            "ML API returned invalid payload; suppressing escalation and continuing monitoring",
+          );
+          storeMLResultAndNavigate(
+            "NO_FALL",
+            0,
+            0,
+            sampleCount,
+            reason,
+            safeSignalKey,
+          );
+          return;
+        }
+
+        setApiStatus(
+          `ML result: ${result} (fall: ${(fall_prob * 100).toFixed(1)}%)`,
+        );
         appendMonitoringLog(
-          `ML API response: ${result}, fall=${(fall_prob * 100).toFixed(1)}%`
+          `ML API response: ${result}, fall=${(fall_prob * 100).toFixed(1)}%, false=${(false_prob * 100).toFixed(1)}%`,
         );
 
-        storeMLResultAndNavigate(result, fall_prob, false_prob, sampleCount, reason);
+        storeMLResultAndNavigate(
+          result,
+          fall_prob,
+          false_prob,
+          sampleCount,
+          reason,
+          safeSignalKey,
+        );
       } catch {
-        setApiStatus('Error processing fall detection');
-        appendMonitoringLog('ML API error during processing; fallback REAL_FALL flow applied');
-        storeMLResultAndNavigate('REAL_FALL', 0.5, 0.5, 0, reason);
+        setApiStatus("Error reaching ML API - continuing monitoring");
+        appendMonitoringLog(
+          "ML API error during processing; suppressing escalation and continuing monitoring",
+        );
+        storeMLResultAndNavigate("NO_FALL", 0, 0, 0, reason);
       } finally {
         isProcessingRef.current = false;
       }
     },
-    [appendMonitoringLog, storeMLResultAndNavigate]
+    [appendMonitoringLog, storeMLResultAndNavigate],
   );
 
   const handleSensorSample = useCallback(
     (newSample: SensorSample) => {
       setSample(newSample);
+
+      // Update buffer fill indicator
       setBufferFill(sensorWindowStore.getBufferFillPercent());
 
+      // Process sample through edge AI filter
       const decision = evaluateWithEdgeFilter(newSample);
       setEdgeStatus(decision);
 
@@ -199,31 +316,53 @@ export default function MonitoringScreen() {
 
       if (enteredTriggerRange && !inTriggerRangeRef.current) {
         appendMonitoringLog(
-          `Sensor entered fall range: acc=${accMagG.toFixed(2)}g, gyro=${newSample.gyroMagnitude.toFixed(2)}rad/s`
+          `Sensor entered fall range: acc=${accMagG.toFixed(2)}g, gyro=${newSample.gyroMagnitude.toFixed(2)}rad/s`,
         );
       }
       inTriggerRangeRef.current = enteredTriggerRange;
 
+      // Edge-filter responsibility: when spike detected, extract buffer and call ML API
       if (decision.shouldEscalateCandidate) {
-        appendMonitoringLog(`Edge filter CALL_API triggered: ${decision.reason}`);
-        void processMLDetection('Edge filter detected a potential fall');
+        appendMonitoringLog(
+          `Edge filter CALL_API triggered: ${decision.reason}`,
+        );
+        void processMLDetection(
+          "Edge filter detected a potential fall",
+          newSample,
+        );
       }
     },
-    [appendMonitoringLog, processMLDetection]
+    [appendMonitoringLog, processMLDetection],
   );
 
   useEffect(() => {
+    // Reset edge filter and clear buffer when monitoring starts
     resetEdgeFilter();
     sensorWindowStore.clear();
     inTriggerRangeRef.current = false;
     setMonitoringLogs([]);
     appendMonitoringLog(`API base resolved to ${apiBaseUrl}`);
 
+    void (async () => {
+      try {
+        const health = await getHealth();
+        appendMonitoringLog(
+          `Backend health check OK: ${health.status} @ ${health.timestamp}`,
+        );
+      } catch {
+        appendMonitoringLog(
+          "Backend health check FAILED: verify API base URL/device network/server status",
+        );
+      }
+    })();
+
+    // Start sensor monitoring
     services.sensorAdapter.start(handleSensorSample);
 
+    // Ensure we're in MONITORING state
     const { state } = getFallEvent();
-    if (state === 'IDLE') {
-      transitionFallEvent('MONITORING', 'Monitoring screen activated');
+    if (state === "IDLE") {
+      transitionFallEvent("MONITORING", "Monitoring screen activated");
     }
 
     return () => {
@@ -235,37 +374,40 @@ export default function MonitoringScreen() {
     const { state } = getFallEvent();
 
     if (
-      state !== 'IDLE' &&
-      state !== 'MONITORING' &&
-      state !== 'CANDIDATE' &&
-      state !== 'CONFIRMING'
+      state !== "IDLE" &&
+      state !== "MONITORING" &&
+      state !== "CANDIDATE" &&
+      state !== "CONFIRMING"
     ) {
       resetFallEvent();
-      transitionFallEvent('MONITORING', 'Reset stale flow before simulation');
+      transitionFallEvent("MONITORING", "Reset stale flow before simulation");
     }
 
-    if (state === 'IDLE') {
-      transitionFallEvent('MONITORING', 'Monitoring screen activated');
+    if (state === "IDLE") {
+      transitionFallEvent("MONITORING", "Monitoring screen activated");
     }
 
-    if (getFallEvent().state === 'MONITORING') {
-      transitionFallEvent('CANDIDATE', 'Manual fall candidate simulation');
+    if (getFallEvent().state === "MONITORING") {
+      transitionFallEvent("CANDIDATE", "Manual fall candidate simulation");
     }
 
-    if (getFallEvent().state === 'CANDIDATE') {
-      transitionFallEvent('CONFIRMING', 'Move to confirmation stage');
+    if (getFallEvent().state === "CANDIDATE") {
+      transitionFallEvent("CONFIRMING", "Move to confirmation stage");
     }
 
+    // Store mock ML result for simulation
     setMLDetectionResult({
-      result: 'REAL_FALL',
+      result: "REAL_FALL",
       fallProbability: 0.85,
       falseProbability: 0.15,
       sampleCount: sensorWindowStore.getTargetWindowSize(),
       triggeredAt: new Date().toISOString(),
     });
 
-    router.push('./confirm');
+    router.push("./confirm");
   };
+
+  const isApiHealthy = apiStatus && !apiStatus.toLowerCase().includes("error");
 
   return (
     <ThemedView style={styles.container}>
@@ -273,114 +415,150 @@ export default function MonitoringScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom + Spacing.xxl },
+          {
+            paddingTop: insets.top + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
-          <ThemedText type="title">Monitoring</ThemedText>
-          <StatusBadge state={event.state} showDescription={false} />
-        </View>
-
-        {/* Active Status Indicator */}
-        <Card variant="glass" style={styles.activeCard}>
-          <View style={[styles.pulseOuter, { borderColor: successColor }]}>
-            <View style={[styles.pulseInner, { backgroundColor: successColor }]} />
-          </View>
-          <ThemedText type="subtitle">Monitoring Active</ThemedText>
-          <ThemedText type="caption">Continuously tracking your safety</ThemedText>
-        </Card>
-
-        {/* Sensor Data Cards */}
-        <View style={styles.sensorGrid}>
-          <InfoCard
-            label="Motion Score"
-            value={sample ? sample.motionScore.toFixed(2) : '--'}
-            variant="accent"
-            size="sm"
-          />
-          <InfoCard
-            label="Acceleration"
-            value={sample ? `${sample.accelMagnitude.toFixed(1)} m/s²` : '--'}
-            variant="default"
-            size="sm"
-          />
-        </View>
-
-        <View style={styles.sensorGrid}>
-          <InfoCard
-            label="Gyroscope"
-            value={sample ? `${sample.gyroMagnitude.toFixed(2)} rad/s` : '--'}
-            variant="warning"
-            size="sm"
-          />
-          <InfoCard
-            label="Buffer"
-            value={`${bufferFill}%`}
-            variant="success"
-            size="sm"
-          />
-        </View>
-
-        {/* Edge Filter Status */}
-        <Card variant="outlined" padding="md">
-          <ThemedText type="label" style={styles.sectionLabel}>Edge Filter</ThemedText>
-          <ThemedText type="caption">
-            {edgeStatus ? `${edgeStatus.edgeDecision} - ${edgeStatus.reason}` : 'Initializing...'}
+          <ThemedText type="hero" style={styles.title}>
+            Live Monitoring
           </ThemedText>
-          {edgeStatus?.windowStats && (
-            <View style={styles.statsRow}>
-              <ThemedText type="caption" style={styles.statItem}>
-                min: {edgeStatus.windowStats.minAccG.toFixed(2)}g
-              </ThemedText>
-              <ThemedText type="caption" style={styles.statItem}>
-                max: {edgeStatus.windowStats.maxAccG.toFixed(2)}g
-              </ThemedText>
-              <ThemedText type="caption" style={styles.statItem}>
-                gyro: {edgeStatus.windowStats.maxGyro.toFixed(2)}
+          <ThemedText type="caption" style={styles.subtitle}>
+            PathSense continuously analyzes motion and confirms high-risk
+            events.
+          </ThemedText>
+          <StatusBadge state={event.state} />
+        </View>
+
+        <Card variant="glass" padding="lg" style={styles.metricsCard}>
+          <ThemedText type="label">Motion Telemetry</ThemedText>
+          <View style={styles.metricsGrid}>
+            <View style={[styles.metricCell, { borderColor }]}>
+              <ThemedText type="caption">Motion</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? sample.motionScore.toFixed(2) : "--"}
               </ThemedText>
             </View>
+            <View style={[styles.metricCell, { borderColor }]}>
+              <ThemedText type="caption">Accel</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? `${sample.accelMagnitude.toFixed(2)} m/s²` : "--"}
+              </ThemedText>
+            </View>
+            <View style={[styles.metricCell, { borderColor }]}>
+              <ThemedText type="caption">Gyro</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? `${sample.gyroMagnitude.toFixed(2)} rad/s` : "--"}
+              </ThemedText>
+            </View>
+            <View style={[styles.metricCell, { borderColor }]}>
+              <ThemedText type="caption">State</ThemedText>
+              <ThemedText type="subtitle">
+                {sample ? sample.motionState : "waiting"}
+              </ThemedText>
+            </View>
+          </View>
+          <ThemedText style={[styles.apiBaseStatus, { color: textSecondary }]}>
+            API Base: {apiBaseUrl}
+          </ThemedText>
+        </Card>
+
+        <Card variant="default" padding="lg" style={styles.progressCard}>
+          <View style={styles.rowBetween}>
+            <ThemedText type="label">Buffer Readiness</ThemedText>
+            <ThemedText type="defaultSemiBold">{bufferFill}%</ThemedText>
+          </View>
+          <View style={[styles.progressTrack, { backgroundColor: cardAlt }]}>
+            <View
+              style={[
+                styles.progressFill,
+                {
+                  width: `${bufferFill}%`,
+                  backgroundColor:
+                    bufferFill >= 100 ? successColor : primaryColor,
+                },
+              ]}
+            />
+          </View>
+          <ThemedText type="caption">
+            {sensorWindowStore.getSampleCount()} raw samples normalized to{" "}
+            {sensorWindowStore.getTargetWindowSize()} model samples
+          </ThemedText>
+        </Card>
+
+        <Card variant="outlined" padding="md">
+          <ThemedText type="label" style={styles.cardTitle}>
+            Edge Filter
+          </ThemedText>
+          <ThemedText style={styles.statusText}>
+            {edgeStatus
+              ? `${edgeStatus.edgeDecision} • ${edgeStatus.reason}`
+              : "Initializing edge model..."}
+          </ThemedText>
+          {edgeStatus?.windowStats && (
+            <ThemedText type="caption" style={styles.windowStats}>
+              min {edgeStatus.windowStats.minAccG.toFixed(2)}g • max{" "}
+              {edgeStatus.windowStats.maxAccG.toFixed(2)}g • gyro{" "}
+              {edgeStatus.windowStats.maxGyro.toFixed(2)} rad/s • samples{" "}
+              {edgeStatus.windowStats.sampleCount}
+            </ThemedText>
           )}
         </Card>
 
-        {/* API Status */}
-        {apiStatus && (
-          <Card variant="default" padding="sm" style={styles.apiCard}>
-            <ThemedText type="caption" style={{ color: primaryColor }}>
-              ML: {apiStatus}
-            </ThemedText>
-          </Card>
-        )}
-
-        {/* Logs Section */}
-        <Card variant="outlined" padding="md" style={styles.logsCard}>
-          <ThemedText type="label" style={styles.sectionLabel}>Activity Log</ThemedText>
-          <View style={styles.logsContainer}>
-            {monitoringLogs.length > 0 ? (
-              monitoringLogs
-                .slice()
-                .reverse()
-                .slice(0, 10)
-                .map((line, idx) => (
-                  <ThemedText key={`${line}-${idx}`} type="caption" style={styles.logLine}>
-                    {line}
-                  </ThemedText>
-                ))
-            ) : (
-              <ThemedText type="caption" style={styles.logLine}>
-                No activity yet...
-              </ThemedText>
-            )}
-          </View>
+        <Card variant="outlined" padding="md">
+          <ThemedText type="label" style={styles.cardTitle}>
+            ML API Status
+          </ThemedText>
+          <ThemedText
+            style={[
+              styles.statusText,
+              {
+                color: apiStatus
+                  ? isApiHealthy
+                    ? accentColor
+                    : dangerColor
+                  : warningColor,
+              },
+            ]}
+          >
+            {apiStatus ?? "Waiting for edge-filter escalation..."}
+          </ThemedText>
         </Card>
 
-        {/* Simulate Button */}
+        <Card variant="glass" padding="md" style={styles.logsCard}>
+          <ThemedText type="label" style={styles.cardTitle}>
+            Activity Feed
+          </ThemedText>
+          {monitoringLogs.length > 0 ? (
+            <ScrollView
+              style={[styles.logsContainer, { borderColor }]}
+              contentContainerStyle={styles.logsContentContainer}
+            >
+              {monitoringLogs
+                .slice()
+                .reverse()
+                .map((line) => (
+                  <ThemedText key={line} style={styles.logLine}>
+                    {line}
+                  </ThemedText>
+                ))}
+            </ScrollView>
+          ) : (
+            <ThemedText type="caption" style={styles.logLine}>
+              No log events yet.
+            </ThemedText>
+          )}
+        </Card>
+
         <Button
-          title="Simulate Fall Detection"
+          title="Simulate fall candidate"
           variant="outline"
+          size="lg"
+          fullWidth
           onPress={handleSimulateCandidate}
-          style={styles.simulateButton}
         />
       </ScrollView>
     </ThemedView>
@@ -396,64 +574,85 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: Spacing.xl,
-    gap: Spacing.md,
+    gap: Spacing.lg,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: Spacing.sm,
-  },
-  activeCard: {
-    alignItems: 'center',
     gap: Spacing.sm,
-    paddingVertical: Spacing.xl,
   },
-  pulseOuter: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    borderWidth: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.sm,
+  title: {
+    lineHeight: 42,
   },
-  pulseInner: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+  subtitle: {
+    maxWidth: 320,
+    lineHeight: 20,
   },
-  sensorGrid: {
-    flexDirection: 'row',
+  metricsCard: {
     gap: Spacing.md,
   },
-  sectionLabel: {
-    marginBottom: Spacing.sm,
+  metricsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: Spacing.sm,
   },
-  statsRow: {
-    flexDirection: 'row',
-    gap: Spacing.md,
+  metricCell: {
+    flexGrow: 1,
+    minWidth: 130,
+    borderWidth: 1,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  apiBaseStatus: {
+    lineHeight: 18,
+    fontSize: 11,
+    fontFamily: "monospace",
+  },
+  progressCard: {
+    gap: Spacing.sm,
+  },
+  rowBetween: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
+  },
+  progressTrack: {
+    width: "100%",
+    height: 10,
+    borderRadius: BorderRadius.full,
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: BorderRadius.full,
+  },
+  cardTitle: {
+    marginBottom: Spacing.xs,
+  },
+  statusText: {
+    lineHeight: 20,
+  },
+  windowStats: {
     marginTop: Spacing.sm,
-  },
-  statItem: {
-    fontFamily: 'monospace',
-  },
-  apiCard: {
-    borderLeftWidth: 3,
-    borderLeftColor: Palette.primary,
-  },
-  logsCard: {
-    maxHeight: 200,
+    lineHeight: 18,
+    fontFamily: "monospace",
   },
   logsContainer: {
+    maxHeight: 220,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    padding: Spacing.sm,
+  },
+  logsContentContainer: {
     gap: Spacing.xs,
   },
   logLine: {
-    fontFamily: 'monospace',
-    fontSize: 11,
     lineHeight: 16,
+    fontSize: 11,
+    opacity: 0.85,
+    fontFamily: "monospace",
   },
-  simulateButton: {
-    marginTop: Spacing.md,
+  logsCard: {
+    gap: Spacing.sm,
   },
 });

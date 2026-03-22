@@ -1,25 +1,25 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'expo-router';
-import { StyleSheet, View, ScrollView } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import { StyleSheet, View, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Card, Button } from '@/components/ui';
-import { DispatchStatusCard } from '@/src/components/alert/DispatchStatusCard';
-import { StatusBadge } from '@/src/components/common/StatusBadge';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { Spacing, BorderRadius, Palette } from '@/constants/theme';
-import { sendEmergencyAlert } from '@/src/services/api/contacts';
-import { playEmergencyHaptic } from '@/src/services/feedback/haptics';
-import { speakEmergencyPrompt } from '@/src/services/feedback/voice';
-import { services } from '@/src/services';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Card, Button } from "@/components/ui";
+import { DispatchStatusCard } from "@/src/components/alert/DispatchStatusCard";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { BorderRadius, Spacing, Palette } from "@/constants/theme";
+import { sendEmergencyAlert } from "@/src/services/api/contacts";
+import { playEmergencyHaptic } from "@/src/services/feedback/haptics";
+import { speakEmergencyPrompt } from "@/src/services/feedback/voice";
+import { services } from "@/src/services";
 import {
   getFallEvent,
   resetFallEvent,
   transitionFallEvent,
-} from '@/src/state/fall-event-store';
-import { useFallEvent } from '@/src/state/use-fall-event';
+} from "@/src/state/fall-event-store";
+import { useFallEvent } from "@/src/state/use-fall-event";
 
 export default function AlertScreen() {
   const router = useRouter();
@@ -28,30 +28,32 @@ export default function AlertScreen() {
   const [isDispatching, setIsDispatching] = useState(false);
   const [hasDispatched, setHasDispatched] = useState(false);
   const [dispatchMessage, setDispatchMessage] = useState(
-    'Preparing SOS payload and notifying contacts.'
+    "Preparing SOS payload and notifying contacts.",
   );
 
-  const dangerColor = useThemeColor({}, 'danger');
-  const dangerLight = useThemeColor({}, 'dangerLight');
-  const successColor = useThemeColor({}, 'success');
+  const dangerColor = useThemeColor({}, "danger");
+  const dangerLight = useThemeColor({}, "dangerLight");
+  const cardAlt = useThemeColor({}, "cardAlt");
+  const borderColor = useThemeColor({}, "borderLight");
+  const textSecondary = useThemeColor({}, "textSecondary");
 
   useEffect(() => {
-    if (getFallEvent().state === 'IDLE') {
-      transitionFallEvent('MONITORING', 'Monitoring inferred at alert entry');
-      transitionFallEvent('CANDIDATE', 'Candidate inferred at alert entry');
-      transitionFallEvent('CONFIRMING', 'Confirming inferred at alert entry');
+    if (getFallEvent().state === "IDLE") {
+      transitionFallEvent("MONITORING", "Monitoring inferred at alert entry");
+      transitionFallEvent("CANDIDATE", "Candidate inferred at alert entry");
+      transitionFallEvent("CONFIRMING", "Confirming inferred at alert entry");
     }
 
-    if (getFallEvent().state === 'CONFIRMING') {
-      transitionFallEvent('ALERTING', 'Alert screen opened from confirmation');
+    if (getFallEvent().state === "CONFIRMING") {
+      transitionFallEvent("ALERTING", "Alert screen opened from confirmation");
     }
 
-    if (getFallEvent().state !== 'ALERTING') {
+    if (getFallEvent().state !== "ALERTING") {
       resetFallEvent();
-      transitionFallEvent('MONITORING', 'Recovered alert flow state');
-      transitionFallEvent('CANDIDATE', 'Recovered candidate state');
-      transitionFallEvent('CONFIRMING', 'Recovered confirming state');
-      transitionFallEvent('ALERTING', 'Recovered alert state');
+      transitionFallEvent("MONITORING", "Recovered alert flow state");
+      transitionFallEvent("CANDIDATE", "Recovered candidate state");
+      transitionFallEvent("CONFIRMING", "Recovered confirming state");
+      transitionFallEvent("ALERTING", "Recovered alert state");
     }
 
     void playEmergencyHaptic();
@@ -60,7 +62,7 @@ export default function AlertScreen() {
 
   const handleDispatched = async (): Promise<void> => {
     if (hasDispatched) {
-      router.push('./result');
+      router.push("./result");
       return;
     }
 
@@ -69,7 +71,7 @@ export default function AlertScreen() {
     }
 
     setIsDispatching(true);
-    setDispatchMessage('Sending alert to emergency contacts...');
+    setDispatchMessage("Sending alert to emergency contacts...");
 
     try {
       const location = await Promise.race([
@@ -81,30 +83,32 @@ export default function AlertScreen() {
 
       const locationText = location
         ? `${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`
-        : 'location unavailable';
+        : "location unavailable";
 
       const alertResponse = await sendEmergencyAlert(
-        `Possible fall detected at ${locationText}.`
+        `Possible fall detected at ${locationText}.`,
       );
 
       if (alertResponse.success) {
         const sentCount = alertResponse.recipients.filter(
-          (recipient) => recipient.status === 'sent'
+          (recipient) => recipient.status === "sent",
         ).length;
         setDispatchMessage(
           location
             ? `SOS sent to ${sentCount}/${alertResponse.recipients.length} contacts with location.`
-            : `SOS sent to ${sentCount}/${alertResponse.recipients.length} contacts without location (timeout fallback).`
+            : `SOS sent to ${sentCount}/${alertResponse.recipients.length} contacts without location (timeout fallback).`,
         );
       } else {
         setDispatchMessage(alertResponse.message);
       }
     } catch {
-      setDispatchMessage('Unable to reach backend. Local emergency flow continues.');
+      setDispatchMessage(
+        "Unable to reach backend. Local emergency flow continues.",
+      );
     }
 
-    if (getFallEvent().state === 'ALERTING') {
-      transitionFallEvent('RESOLVED', 'SOS dispatch marked complete');
+    if (getFallEvent().state === "ALERTING") {
+      transitionFallEvent("RESOLVED", "SOS dispatch marked complete");
     }
 
     setHasDispatched(true);
@@ -117,23 +121,34 @@ export default function AlertScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xxl },
+          {
+            paddingTop: insets.top + Spacing.xl,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
         {/* Emergency Header */}
         <View style={styles.header}>
-          <View style={[styles.alertIconOuter, { backgroundColor: dangerLight }]}>
-            <View style={[styles.alertIconInner, { backgroundColor: dangerColor }]}>
+          <View
+            style={[styles.alertIconOuter, { backgroundColor: dangerLight }]}
+          >
+            <View
+              style={[styles.alertIconInner, { backgroundColor: dangerColor }]}
+            >
               <ThemedText style={styles.alertIcon}>!</ThemedText>
             </View>
           </View>
-          <ThemedText type="hero" style={[styles.title, { color: dangerColor }]}>
+          <ThemedText
+            type="hero"
+            style={[styles.title, { color: dangerColor }]}
+          >
             Emergency Alert
           </ThemedText>
           <ThemedText type="caption" style={styles.subtitle}>
-            Dispatching SOS to your emergency contacts
+            Critical escalation is active. Dispatch control is armed.
           </ThemedText>
+          <StatusBadge state={event.state} />
         </View>
 
         {/* Dispatch Status Card */}
@@ -143,21 +158,27 @@ export default function AlertScreen() {
           success={hasDispatched}
         />
 
-        {/* Status Badge */}
-        <View style={styles.statusRow}>
-          <StatusBadge state={event.state} />
-        </View>
-
         {/* Location Info */}
         <Card variant="outlined" padding="md">
-          <ThemedText type="label" style={styles.sectionLabel}>Location Status</ThemedText>
-          <ThemedText type="caption">
-            {isDispatching
-              ? 'Acquiring GPS coordinates...'
-              : hasDispatched
-                ? 'Location data included in alert'
-                : 'Location will be shared with emergency contacts'}
+          <ThemedText type="label" style={styles.sectionLabel}>
+            Tactical Feed
           </ThemedText>
+          <View style={[styles.infoRow, { borderBottomColor: borderColor }]}> 
+            <ThemedText type="caption">GPS</ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.infoValue}>
+              {isDispatching
+                ? "Acquiring coordinates"
+                : hasDispatched
+                  ? "Attached to dispatch"
+                  : "Standby"}
+            </ThemedText>
+          </View>
+          <View style={styles.infoRow}>
+            <ThemedText type="caption">Emergency Contacts</ThemedText>
+            <ThemedText type="defaultSemiBold" style={styles.infoValue}>
+              {hasDispatched ? "Notified" : "Pending"}
+            </ThemedText>
+          </View>
         </Card>
 
         {/* Action Button */}
@@ -165,12 +186,12 @@ export default function AlertScreen() {
           <Button
             title={
               isDispatching
-                ? 'Dispatching...'
+                ? "Dispatching..."
                 : hasDispatched
-                  ? 'Continue'
-                  : 'Send Emergency Alert'
+                  ? "Continue"
+                  : "Send Emergency Alert"
             }
-            variant={hasDispatched ? 'primary' : 'danger'}
+            variant={hasDispatched ? "primary" : "danger"}
             size="lg"
             fullWidth
             onPress={() => void handleDispatched()}
@@ -180,11 +201,17 @@ export default function AlertScreen() {
         </View>
 
         {/* Info Text */}
-        <ThemedText type="caption" style={styles.infoText}>
+        <Card
+          variant="glass"
+          padding="md"
+          style={[styles.noticeCard, { backgroundColor: cardAlt }]}
+        >
+          <ThemedText type="caption" style={[styles.infoText, { color: textSecondary }]}>
           {hasDispatched
-            ? 'Your emergency contacts have been notified. Help is on the way.'
-            : 'Tap the button above to send an emergency alert with your location to all configured contacts.'}
-        </ThemedText>
+            ? "Emergency sequence complete. Contacts have been notified."
+            : "Send the alert to notify all configured emergency contacts."}
+          </ThemedText>
+        </Card>
       </ScrollView>
     </ThemedView>
   );
@@ -202,47 +229,62 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     gap: Spacing.md,
-    paddingVertical: Spacing.lg,
+    paddingVertical: Spacing.xl,
   },
   alertIconOuter: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 92,
+    height: 92,
+    borderRadius: 46,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "rgba(244, 240, 232, 0.25)",
   },
   alertIconInner: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 66,
+    height: 66,
+    borderRadius: 33,
+    alignItems: "center",
+    justifyContent: "center",
   },
   alertIcon: {
     fontSize: 32,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Palette.white,
   },
   title: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
-    textAlign: 'center',
-  },
-  statusRow: {
-    alignItems: 'center',
+    textAlign: "center",
+    maxWidth: 340,
+    lineHeight: 20,
   },
   sectionLabel: {
-    marginBottom: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  infoRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+  },
+  infoValue: {
+    textAlign: "right",
   },
   buttonsContainer: {
     paddingTop: Spacing.md,
   },
+  noticeCard: {
+    borderRadius: BorderRadius.md,
+  },
   infoText: {
-    textAlign: 'center',
-    opacity: 0.7,
-    paddingHorizontal: Spacing.lg,
+    textAlign: "center",
+    lineHeight: 20,
+    opacity: 0.85,
   },
 });

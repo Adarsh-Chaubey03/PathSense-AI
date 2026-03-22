@@ -1,7 +1,6 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
-import morgan from "morgan";
 import contactsRouter from "./routes/contacts.js";
 import fallRoutes from "./routes/fallRoutes.ts";
 import fallDetectRoutes from "./routes/fall.routes.js";
@@ -10,11 +9,11 @@ const app = express();
 
 app.use(helmet());
 app.use(cors());
-app.use(morgan("dev"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/api", (req, _res, next) => {
+app.use((req, res, next) => {
+  const startedAt = Date.now();
   const receivedAt = new Date().toISOString();
   const userAgent = req.headers["user-agent"] ?? "unknown";
   const forwardedFor = req.headers["x-forwarded-for"];
@@ -23,9 +22,21 @@ app.use("/api", (req, _res, next) => {
       ? forwardedFor.split(",")[0].trim()
       : req.ip;
 
+  const requestSize = req.headers["content-length"] ?? "0";
+
   console.log(
-    `[API][IN] ${receivedAt} ${req.method} ${req.originalUrl} ip=${sourceIp} ua=${userAgent}`,
+    `[HTTP][IN] ${receivedAt} ${req.method} ${req.originalUrl} ip=${sourceIp} ua=${userAgent} size=${requestSize}`,
   );
+
+  res.on("finish", () => {
+    const completedAt = new Date().toISOString();
+    const durationMs = Date.now() - startedAt;
+    const responseSize = res.getHeader("content-length") ?? "0";
+
+    console.log(
+      `[HTTP][OUT] ${completedAt} ${req.method} ${req.originalUrl} status=${res.statusCode} durationMs=${durationMs} size=${responseSize}`,
+    );
+  });
 
   next();
 });

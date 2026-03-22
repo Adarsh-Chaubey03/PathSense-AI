@@ -16,6 +16,7 @@ export interface MLDetectionData {
   falseProbability: number;
   sampleCount: number;
   triggeredAt: string;
+  safeSignalKey?: string;
 }
 
 export interface FallEventContext {

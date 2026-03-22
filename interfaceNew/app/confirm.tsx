@@ -4,25 +4,27 @@ import { useFocusEffect } from '@react-navigation/native';
 import { StyleSheet, View, ScrollView, Platform, Vibration } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Card, Button } from '@/components/ui';
-import { ConfirmationStatusCard } from '@/src/components/confirmation/ConfirmationStatusCard';
-import { CountdownTimer } from '@/src/components/common/CountdownTimer';
-import { StatusBadge } from '@/src/components/common/StatusBadge';
-import { Spacing } from '@/constants/theme';
-import { playConfirmationPromptHaptic } from '@/src/services/feedback/haptics';
-import { speakConfirmationPrompt } from '@/src/services/feedback/voice';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Button, Card } from "@/components/ui";
+import { BorderRadius, Spacing } from "@/constants/theme";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { ConfirmationStatusCard } from "@/src/components/confirmation/ConfirmationStatusCard";
+import { CountdownTimer } from "@/src/components/common/CountdownTimer";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import { playConfirmationPromptHaptic } from "@/src/services/feedback/haptics";
+import { speakConfirmationPrompt } from "@/src/services/feedback/voice";
+import { cacheSafeSignalKey } from "@/src/services/storage/safe-fall-cache";
 import {
   getFallEvent,
   resetFallEvent,
   transitionFallEvent,
   getMLDetectionResult,
   clearMLDetectionResult,
-} from '@/src/state/fall-event-store';
-import { useFallEvent } from '@/src/state/use-fall-event';
-import type { MLDetectionData } from '@/src/features/fall-event/event.types';
-import { CONFIRMATION_TIMEOUT_SECONDS } from '@/src/features/fall-event/config';
+} from "@/src/state/fall-event-store";
+import { useFallEvent } from "@/src/state/use-fall-event";
+import type { MLDetectionData } from "@/src/features/fall-event/event.types";
+import { CONFIRMATION_TIMEOUT_SECONDS } from "@/src/features/fall-event/config";
 
 const COUNTDOWN_SECONDS = CONFIRMATION_TIMEOUT_SECONDS;
 
@@ -34,30 +36,39 @@ export default function ConfirmScreen() {
   const [isEscalating, setIsEscalating] = useState(false);
   const [mlData, setMlData] = useState<MLDetectionData | undefined>(undefined);
   const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const safeConfirmedRef = useRef(false);
+
+  const successColor = useThemeColor({}, "success");
+  const dangerColor = useThemeColor({}, "danger");
+  const warningColor = useThemeColor({}, "warning");
 
   useEffect(() => {
+    // Get ML detection result from store
     const detectionData = getMLDetectionResult();
     setMlData(detectionData);
 
     const { state } = getFallEvent();
 
-    if (state === 'IDLE') {
-      transitionFallEvent('MONITORING', 'Monitoring inferred at confirm entry');
+    if (state === "IDLE") {
+      transitionFallEvent("MONITORING", "Monitoring inferred at confirm entry");
     }
 
-    if (getFallEvent().state === 'MONITORING') {
-      transitionFallEvent('CANDIDATE', 'Candidate inferred at confirm screen entry');
+    if (getFallEvent().state === "MONITORING") {
+      transitionFallEvent(
+        "CANDIDATE",
+        "Candidate inferred at confirm screen entry",
+      );
     }
 
-    if (getFallEvent().state === 'CANDIDATE') {
-      transitionFallEvent('CONFIRMING', 'Confirmation screen active');
+    if (getFallEvent().state === "CANDIDATE") {
+      transitionFallEvent("CONFIRMING", "Confirmation screen active");
     }
 
-    if (getFallEvent().state !== 'CONFIRMING') {
+    if (getFallEvent().state !== "CONFIRMING") {
       resetFallEvent();
-      transitionFallEvent('MONITORING', 'Recovered confirmation flow state');
-      transitionFallEvent('CANDIDATE', 'Recovered candidate state');
-      transitionFallEvent('CONFIRMING', 'Recovered confirmation state');
+      transitionFallEvent("MONITORING", "Recovered confirmation flow state");
+      transitionFallEvent("CANDIDATE", "Recovered candidate state");
+      transitionFallEvent("CONFIRMING", "Recovered confirmation state");
     }
 
   }, []);
@@ -100,48 +111,70 @@ export default function ConfirmScreen() {
 
   const getStatusMessage = (): string => {
     if (!mlData) {
-      return 'Potential fall detected. Are you okay?';
+      return "Potential fall detected. Are you okay?";
     }
 
     const probability = (mlData.fallProbability * 100).toFixed(0);
     const samples = mlData.sampleCount;
 
     switch (mlData.result) {
-      case 'REAL_FALL':
-        return `Our AI detected a potential fall with ${probability}% confidence after analyzing ${samples} sensor samples. Please respond within ${COUNTDOWN_SECONDS} seconds.`;
-      case 'FALSE_ALARM':
-        return 'AI flagged as possible false alarm, but please confirm you\'re okay.';
-      case 'NO_FALL':
-        return 'AI detected no fall, but edge-filter triggered. Please confirm.';
+      case "REAL_FALL":
+        return `ML detected a potential fall (${probability}% confidence, ${samples} samples analyzed). Please respond within ${COUNTDOWN_SECONDS} seconds.`;
+      case "FALSE_ALARM":
+        return `ML flagged as possible false alarm, but please confirm you're okay.`;
+      case "NO_FALL":
+        return `ML detected no fall, but edge-filter triggered. Please confirm.`;
       default:
-        return 'Potential fall detected. Waiting for your response.';
+        return "Potential fall detected. Waiting for your response.";
     }
   };
 
-  const handleImOk = (): void => {
-    if (getFallEvent().state === 'CONFIRMING') {
-      transitionFallEvent('FALSE_ALARM', 'User confirmed safety');
+  const handleImOk = useCallback(async (): Promise<void> => {
+    if (safeConfirmedRef.current) {
+      return;
     }
+
+    safeConfirmedRef.current = true;
+
+    if (getFallEvent().state === "CONFIRMING") {
+      transitionFallEvent("FALSE_ALARM", "User confirmed safety");
+    }
+
+    setSecondsLeft(0);
+
+    if (mlData?.safeSignalKey) {
+      void cacheSafeSignalKey(mlData.safeSignalKey);
+    }
+
+    // Clear ML detection data
     clearMLDetectionResult();
-    router.push('./result');
-  };
+
+    router.push("./result");
+  }, [mlData?.safeSignalKey, router]);
 
   const handleEscalate = useCallback(async (): Promise<void> => {
-    if (isEscalating) {
+    if (isEscalating || safeConfirmedRef.current) {
       return;
     }
 
     setIsEscalating(true);
 
-    if (getFallEvent().state === 'CONFIRMING') {
-      transitionFallEvent('ALERTING', 'No confirmation response - triggering emergency');
+    if (getFallEvent().state === "CONFIRMING") {
+      transitionFallEvent(
+        "ALERTING",
+        "No confirmation response - triggering emergency",
+      );
     }
 
-    router.push('./alert');
+    router.push("./alert");
     setIsEscalating(false);
   }, [isEscalating, router]);
 
   useEffect(() => {
+    if (safeConfirmedRef.current) {
+      return;
+    }
+
     if (secondsLeft <= 0) {
       void handleEscalate();
       return;
@@ -160,73 +193,68 @@ export default function ConfirmScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + Spacing.xl, paddingBottom: insets.bottom + Spacing.xxl },
+          {
+            paddingTop: insets.top + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
         <View style={styles.header}>
           <ThemedText type="hero" style={styles.title}>
             Are you okay?
           </ThemedText>
+          <ThemedText type="caption" style={styles.subtitle}>
+            Respond to confirm your safety before the countdown ends.
+          </ThemedText>
+          <StatusBadge state={event.state} />
         </View>
 
-        {/* Countdown Timer - Prominent */}
-        <View style={styles.timerContainer}>
-          <CountdownTimer
-            secondsLeft={secondsLeft}
-            totalSeconds={COUNTDOWN_SECONDS}
-            size="lg"
-          />
-        </View>
-
-        {/* Status Message */}
         <ConfirmationStatusCard
           message={getStatusMessage()}
-          variant={secondsLeft <= 10 ? 'danger' : 'warning'}
+          variant={secondsLeft <= 10 ? "danger" : "warning"}
         />
 
-        {/* ML Info Card */}
         {mlData && (
-          <Card variant="outlined" padding="md" style={styles.mlCard}>
-            <ThemedText type="label" style={styles.mlLabel}>Detection Details</ThemedText>
-            <View style={styles.mlGrid}>
-              <View style={styles.mlItem}>
-                <ThemedText type="caption">Result</ThemedText>
-                <ThemedText type="defaultSemiBold">{mlData.result}</ThemedText>
-              </View>
-              <View style={styles.mlItem}>
-                <ThemedText type="caption">Confidence</ThemedText>
-                <ThemedText type="defaultSemiBold">
-                  {(mlData.fallProbability * 100).toFixed(0)}%
-                </ThemedText>
-              </View>
-              <View style={styles.mlItem}>
-                <ThemedText type="caption">Samples</ThemedText>
-                <ThemedText type="defaultSemiBold">{mlData.sampleCount}</ThemedText>
-              </View>
+          <Card variant="outlined" padding="md" style={styles.mlInfoContainer}>
+            <ThemedText type="label" style={styles.cardTitle}>
+              ML Detection Summary
+            </ThemedText>
+            <View style={styles.mlRow}>
+              <ThemedText type="caption">Model result</ThemedText>
+              <ThemedText type="defaultSemiBold">{mlData.result}</ThemedText>
+            </View>
+            <View style={styles.mlRow}>
+              <ThemedText type="caption">Fall probability</ThemedText>
+              <ThemedText type="defaultSemiBold">
+                {(mlData.fallProbability * 100).toFixed(1)}%
+              </ThemedText>
+            </View>
+            <View style={styles.mlRow}>
+              <ThemedText type="caption">Samples analyzed</ThemedText>
+              <ThemedText type="defaultSemiBold">
+                {mlData.sampleCount}
+              </ThemedText>
             </View>
           </Card>
         )}
 
-        {/* Status Badge */}
-        <View style={styles.statusRow}>
-          <StatusBadge state={event.state} showDescription={false} />
-        </View>
+        <Card variant="glass" padding="lg" style={styles.timerCard}>
+          <CountdownTimer secondsLeft={secondsLeft} />
+        </Card>
 
-        {/* Action Buttons - Large and Prominent */}
-        <View style={styles.buttonsContainer}>
+        <View style={styles.actions}>
           <Button
-            title="YES - I'm OK"
+            title="YES - I’m OK"
             variant="success"
             size="lg"
             fullWidth
-            onPress={handleImOk}
-            style={styles.okButton}
+            onPress={() => void handleImOk()}
           />
-
           <Button
-            title={isEscalating ? 'Triggering SOS...' : 'NO - Send Emergency SOS'}
+            title={
+              isEscalating ? "Triggering SOS..." : "NO - Send Emergency SOS"
+            }
             variant="danger"
             size="lg"
             fullWidth
@@ -236,9 +264,24 @@ export default function ConfirmScreen() {
           />
         </View>
 
-        {/* Warning Text */}
-        <ThemedText type="caption" style={styles.warningText}>
-          If no response in {secondsLeft}s, emergency contacts will be notified automatically
+        <Card variant="outlined" padding="md">
+          <ThemedText
+            type="caption"
+            style={[
+              styles.timeoutWarning,
+              { color: secondsLeft <= 10 ? dangerColor : warningColor },
+            ]}
+          >
+            If no response in {secondsLeft}s, emergency contacts will be
+            notified.
+          </ThemedText>
+        </Card>
+
+        <ThemedText
+          type="caption"
+          style={[styles.helperText, { color: successColor }]}
+        >
+          Tap “YES - I’m OK” to immediately cancel escalation.
         </ThemedText>
       </ScrollView>
     </ThemedView>
@@ -257,42 +300,40 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   header: {
-    alignItems: 'center',
+    gap: Spacing.sm,
   },
   title: {
-    textAlign: 'center',
+    lineHeight: 42,
   },
-  timerContainer: {
-    alignItems: 'center',
-    paddingVertical: Spacing.lg,
+  subtitle: {
+    lineHeight: 20,
+    maxWidth: 320,
   },
-  mlCard: {
-    gap: Spacing.md,
+  mlInfoContainer: {
+    gap: Spacing.sm,
   },
-  mlLabel: {
+  cardTitle: {
     marginBottom: Spacing.xs,
   },
-  mlGrid: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  mlRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
   },
-  mlItem: {
-    alignItems: 'center',
-    gap: Spacing.xs,
+  timerCard: {
+    alignItems: "center",
+    borderRadius: BorderRadius.xl,
   },
-  statusRow: {
-    alignItems: 'center',
-  },
-  buttonsContainer: {
+  actions: {
     gap: Spacing.md,
-    paddingTop: Spacing.md,
   },
-  okButton: {
-    minHeight: 64,
+  timeoutWarning: {
+    textAlign: "center",
+    lineHeight: 20,
   },
-  warningText: {
-    textAlign: 'center',
-    opacity: 0.7,
-    paddingHorizontal: Spacing.xl,
+  helperText: {
+    textAlign: "center",
+    opacity: 0.9,
   },
 });

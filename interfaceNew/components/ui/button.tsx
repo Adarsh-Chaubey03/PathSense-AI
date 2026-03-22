@@ -9,13 +9,19 @@ import {
   View,
   type TouchableOpacityProps,
   ActivityIndicator,
-} from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { BorderRadius, Shadows, Spacing, Palette } from '@/constants/theme';
+} from "react-native";
+import { ThemedText } from "@/components/themed-text";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { BorderRadius, Shadows, Spacing, Palette } from "@/constants/theme";
 
-export type ButtonVariant = 'primary' | 'secondary' | 'success' | 'danger' | 'ghost' | 'outline';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "success"
+  | "danger"
+  | "ghost"
+  | "outline";
+export type ButtonSize = "sm" | "md" | "lg";
 
 export type ButtonProps = TouchableOpacityProps & {
   title: string;
@@ -23,42 +29,43 @@ export type ButtonProps = TouchableOpacityProps & {
   size?: ButtonSize;
   loading?: boolean;
   icon?: React.ReactNode;
-  iconPosition?: 'left' | 'right';
+  iconPosition?: "left" | "right";
   fullWidth?: boolean;
 };
 
 export function Button({
   title,
-  variant = 'primary',
-  size = 'md',
+  variant = "primary",
+  size = "md",
   loading = false,
   icon,
-  iconPosition = 'left',
+  iconPosition = "left",
   fullWidth = false,
   disabled,
   style,
   ...props
 }: ButtonProps) {
-  const primaryColor = useThemeColor({}, 'primary');
-  const secondaryColor = useThemeColor({}, 'secondary');
-  const successColor = useThemeColor({}, 'success');
-  const dangerColor = useThemeColor({}, 'danger');
-  const borderColor = useThemeColor({}, 'borderLight');
+  const primaryColor = useThemeColor({}, "primary");
+  const secondaryColor = useThemeColor({}, "secondary");
+  const successColor = useThemeColor({}, "success");
+  const dangerColor = useThemeColor({}, "danger");
+  const borderColor = useThemeColor({}, "borderLight");
+  const shadowColor = useThemeColor({}, "shadow");
 
   const getBackgroundColor = () => {
     if (disabled) return Palette.mediumGray;
     switch (variant) {
-      case 'primary':
+      case "primary":
         return primaryColor;
-      case 'secondary':
+      case "secondary":
         return secondaryColor;
-      case 'success':
+      case "success":
         return successColor;
-      case 'danger':
+      case "danger":
         return dangerColor;
-      case 'ghost':
-      case 'outline':
-        return 'transparent';
+      case "ghost":
+      case "outline":
+        return "transparent";
       default:
         return primaryColor;
     }
@@ -67,25 +74,25 @@ export function Button({
   const getTextColor = () => {
     if (disabled) return Palette.gray;
     switch (variant) {
-      case 'primary':
-      case 'secondary':
-      case 'success':
-      case 'danger':
-        return '#FFFFFF';
-      case 'ghost':
+      case "primary":
+      case "secondary":
+      case "success":
+      case "danger":
+        return "#FFFFFF";
+      case "ghost":
         return primaryColor;
-      case 'outline':
+      case "outline":
         return primaryColor;
       default:
-        return '#FFFFFF';
+        return "#FFFFFF";
     }
   };
 
   const getSizeStyle = () => {
     switch (size) {
-      case 'sm':
+      case "sm":
         return styles.sizeSm;
-      case 'lg':
+      case "lg":
         return styles.sizeLg;
       default:
         return styles.sizeMd;
@@ -94,9 +101,9 @@ export function Button({
 
   const getTextSize = () => {
     switch (size) {
-      case 'sm':
+      case "sm":
         return { fontSize: 14 };
-      case 'lg':
+      case "lg":
         return { fontSize: 18 };
       default:
         return { fontSize: 16 };
@@ -112,8 +119,13 @@ export function Button({
         styles.base,
         getSizeStyle(),
         { backgroundColor },
-        variant === 'outline' && [styles.outline, { borderColor: primaryColor }],
-        variant !== 'ghost' && variant !== 'outline' && Shadows.sm,
+        { borderColor },
+        variant === "outline" && [
+          styles.outline,
+          { borderColor: primaryColor },
+        ],
+        variant !== "ghost" &&
+          variant !== "outline" && [{ shadowColor }, Shadows.sm],
         fullWidth && styles.fullWidth,
         disabled && styles.disabled,
         style,
@@ -126,19 +138,15 @@ export function Button({
         <ActivityIndicator color={textColor} size="small" />
       ) : (
         <View style={styles.content}>
-          {icon && iconPosition === 'left' && (
+          {icon && iconPosition === "left" && (
             <View style={styles.iconLeft}>{icon}</View>
           )}
           <ThemedText
-            style={[
-              styles.text,
-              getTextSize(),
-              { color: textColor },
-            ]}
+            style={[styles.text, getTextSize(), { color: textColor }]}
           >
             {title}
           </ThemedText>
-          {icon && iconPosition === 'right' && (
+          {icon && iconPosition === "right" && (
             <View style={styles.iconRight}>{icon}</View>
           )}
         </View>
@@ -149,10 +157,11 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
+    borderRadius: BorderRadius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    borderWidth: 1,
   },
   sizeSm: {
     paddingVertical: Spacing.sm,
@@ -167,25 +176,26 @@ const styles = StyleSheet.create({
   sizeLg: {
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.xl,
-    minHeight: 56,
+    minHeight: 54,
   },
   outline: {
-    borderWidth: 2,
+    borderWidth: 1,
   },
   fullWidth: {
-    width: '100%',
+    width: "100%",
   },
   disabled: {
     opacity: 0.6,
   },
   content: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
   },
   text: {
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   iconLeft: {
     marginRight: Spacing.sm,

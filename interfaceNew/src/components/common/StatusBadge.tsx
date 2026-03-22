@@ -3,11 +3,11 @@
  * Soft, pill-shaped badge with color-coded status.
  */
 
-import { StyleSheet, View } from 'react-native';
-import { ThemedText } from '@/components/themed-text';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { BorderRadius, Spacing, Palette } from '@/constants/theme';
-import type { FallEventState } from '@/src/features/fall-event/event.types';
+import { StyleSheet, View } from "react-native";
+import { ThemedText } from "@/components/themed-text";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { BorderRadius, Spacing, Palette } from "@/constants/theme";
+import type { FallEventState } from "@/src/features/fall-event/event.types";
 
 interface StatusBadgeProps {
   state: FallEventState;
@@ -16,68 +16,104 @@ interface StatusBadgeProps {
 
 const STATE_CONFIG: Record<
   FallEventState,
-  { label: string; description: string; colorKey: 'primary' | 'success' | 'warning' | 'danger' | 'accent' }
+  {
+    label: string;
+    description: string;
+    colorKey:
+      | "primary"
+      | "secondary"
+      | "success"
+      | "warning"
+      | "danger"
+      | "accent";
+    lightKey:
+      | "primaryLight"
+      | "successLight"
+      | "warningLight"
+      | "dangerLight"
+      | "accentLight";
+  }
 > = {
   IDLE: {
-    label: 'Idle',
-    description: 'Monitoring inactive',
-    colorKey: 'primary',
+    label: "IDLE",
+    description: "Monitoring paused",
+    colorKey: "secondary",
+    lightKey: "primaryLight",
   },
   MONITORING: {
-    label: 'Active',
-    description: 'Monitoring your safety',
-    colorKey: 'success',
+    label: "ACTIVE",
+    description: "Realtime safety monitoring",
+    colorKey: "primary",
+    lightKey: "successLight",
   },
   CANDIDATE: {
-    label: 'Detecting',
-    description: 'Analyzing motion pattern',
-    colorKey: 'warning',
+    label: "ANALYZING",
+    description: "Evaluating motion spike",
+    colorKey: "warning",
+    lightKey: "warningLight",
   },
   CONFIRMING: {
-    label: 'Confirming',
-    description: 'Waiting for your response',
-    colorKey: 'warning',
+    label: "CONFIRM",
+    description: "Awaiting user response",
+    colorKey: "warning",
+    lightKey: "warningLight",
   },
   ALERTING: {
-    label: 'Alert',
-    description: 'Dispatching emergency alert',
-    colorKey: 'danger',
+    label: "ALERT",
+    description: "Dispatch in progress",
+    colorKey: "accent",
+    lightKey: "dangerLight",
   },
   ESCALATING: {
-    label: 'Escalating',
-    description: 'Contacting emergency services',
-    colorKey: 'danger',
+    label: "ESCALATING",
+    description: "Notifying emergency contacts",
+    colorKey: "danger",
+    lightKey: "dangerLight",
   },
   RESOLVED: {
-    label: 'Resolved',
-    description: 'Event completed',
-    colorKey: 'success',
+    label: "RESOLVED",
+    description: "Incident flow completed",
+    colorKey: "secondary",
+    lightKey: "successLight",
   },
   FALSE_ALARM: {
-    label: 'Dismissed',
-    description: 'False alarm confirmed',
-    colorKey: 'accent',
+    label: "CLEAR",
+    description: "False alarm acknowledged",
+    colorKey: "success",
+    lightKey: "accentLight",
   },
 };
 
-export function StatusBadge({ state, showDescription = true }: StatusBadgeProps) {
+export function StatusBadge({
+  state,
+  showDescription = true,
+}: StatusBadgeProps) {
   const config = STATE_CONFIG[state];
 
-  const primary = useThemeColor({}, 'primary');
-  const success = useThemeColor({}, 'success');
-  const warning = useThemeColor({}, 'warning');
-  const danger = useThemeColor({}, 'danger');
-  const accent = useThemeColor({}, 'accent');
+  const primary = useThemeColor({}, "primary");
+  const secondary = useThemeColor({}, "secondary");
+  const success = useThemeColor({}, "success");
+  const warning = useThemeColor({}, "warning");
+  const danger = useThemeColor({}, "danger");
+  const accent = useThemeColor({}, "accent");
+  const primaryLight = useThemeColor({}, "primaryLight");
+  const successLight = useThemeColor({}, "successLight");
+  const warningLight = useThemeColor({}, "warningLight");
+  const dangerLight = useThemeColor({}, "dangerLight");
+  const accentLight = useThemeColor({}, "accentLight");
+  const textColor = useThemeColor({}, "text");
 
   const getColor = () => {
     switch (config.colorKey) {
-      case 'success':
+      case "success":
         return success;
-      case 'warning':
+      case "secondary":
+        return secondary;
+      case "warning":
         return warning;
-      case 'danger':
+      case "danger":
         return danger;
-      case 'accent':
+      case "accent":
         return accent;
       default:
         return primary;
@@ -86,14 +122,36 @@ export function StatusBadge({ state, showDescription = true }: StatusBadgeProps)
 
   const color = getColor();
 
+  const getTintColor = () => {
+    switch (config.lightKey) {
+      case "successLight":
+        return successLight;
+      case "warningLight":
+        return warningLight;
+      case "dangerLight":
+        return dangerLight;
+      case "accentLight":
+        return accentLight;
+      default:
+        return primaryLight;
+    }
+  };
+
+  const tintColor = getTintColor();
+
   return (
     <View style={styles.container}>
-      <View style={[styles.badge, { backgroundColor: color }]}>
-        <View style={[styles.dot, { backgroundColor: Palette.white }]} />
-        <ThemedText style={styles.label}>{config.label}</ThemedText>
+      <View style={[styles.badgeOuter, { backgroundColor: tintColor }]}>
+        <View style={[styles.badge, { backgroundColor: color }]}>
+          <View style={styles.dot} />
+          <ThemedText style={styles.label}>{config.label}</ThemedText>
+        </View>
       </View>
       {showDescription && (
-        <ThemedText type="caption" style={styles.description}>
+        <ThemedText
+          type="caption"
+          style={[styles.description, { color: textColor }]}
+        >
           {config.description}
         </ThemedText>
       )}
@@ -103,30 +161,36 @@ export function StatusBadge({ state, showDescription = true }: StatusBadgeProps)
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: Spacing.xs,
+  },
+  badgeOuter: {
+    borderRadius: BorderRadius.full,
+    padding: 2,
   },
   badge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: Spacing.xs + 2,
-    paddingHorizontal: Spacing.md,
     borderRadius: BorderRadius.full,
+    flexDirection: "row",
+    alignItems: "center",
     gap: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    paddingHorizontal: Spacing.md,
   },
   dot: {
     width: 6,
     height: 6,
     borderRadius: 3,
+    backgroundColor: Palette.white,
   },
   label: {
     color: Palette.white,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.3,
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.9,
   },
   description: {
-    flex: 1,
+    lineHeight: 17,
+    opacity: 0.72,
   },
 });

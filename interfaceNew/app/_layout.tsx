@@ -3,45 +3,45 @@ import {
   DefaultTheme,
   ThemeProvider,
   type Theme,
-} from '@react-navigation/native';
-import { useEffect } from 'react';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+} from "@react-navigation/native";
+import { useEffect } from "react";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
 
-import { bootstrapApp } from '@/src/bootstrap';
-import { useColorScheme } from '@/hooks/use-color-scheme';
-import { Colors, Palette } from '@/constants/theme';
+import { bootstrapApp } from "@/src/bootstrap";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+import { Colors, Palette } from "@/constants/theme";
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: "(tabs)",
 };
 
-// Custom light theme with pastel colors
+// Noir-inspired light profile (intentionally dark UI)
 const LightTheme: Theme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
     primary: Palette.primary,
     background: Palette.cream,
-    card: Palette.white,
+    card: Palette.lightGray,
     text: Palette.charcoal,
-    border: Palette.lightGray,
-    notification: Palette.secondary,
+    border: Palette.mediumGray,
+    notification: Palette.accent,
   },
 };
 
-// Custom dark theme
+// Noir-inspired dark profile
 const CustomDarkTheme: Theme = {
   ...DarkTheme,
   colors: {
     ...DarkTheme.colors,
-    primary: Palette.primaryLight,
+    primary: Palette.primary,
     background: Palette.dark,
-    card: '#2A2838',
-    text: '#ECEDEE',
-    border: '#333140',
-    notification: Palette.secondaryLight,
+    card: "#1A1A1E",
+    text: "#E3DDD0",
+    border: "#2A2A30",
+    notification: Palette.accent,
   },
 };
 
@@ -50,19 +50,21 @@ export default function RootLayout() {
 
   useEffect(() => {
     bootstrapApp().catch((error) => {
-      console.warn('[Bootstrap] Failed to initialize app', error);
+      console.warn("[Bootstrap] Failed to initialize app", error);
     });
   }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? CustomDarkTheme : LightTheme}>
+    <ThemeProvider
+      value={colorScheme === "dark" ? CustomDarkTheme : LightTheme}
+    >
       <Stack
         screenOptions={{
           headerShown: false,
           contentStyle: {
-            backgroundColor: Colors[colorScheme ?? 'light'].background,
+            backgroundColor: Colors[colorScheme ?? "light"].background,
           },
-          animation: 'slide_from_right',
+          animation: "slide_from_right",
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
@@ -70,11 +72,11 @@ export default function RootLayout() {
           name="monitoring"
           options={{
             headerShown: true,
-            headerTitle: 'Monitoring',
+            headerTitle: "Monitoring",
             headerStyle: {
-              backgroundColor: Colors[colorScheme ?? 'light'].card,
+              backgroundColor: Colors[colorScheme ?? "light"].card,
             },
-            headerTintColor: Colors[colorScheme ?? 'light'].primary,
+            headerTintColor: Colors[colorScheme ?? "light"].primary,
             headerShadowVisible: false,
           }}
         />
@@ -103,20 +105,20 @@ export default function RootLayout() {
           name="settings"
           options={{
             headerShown: true,
-            headerTitle: 'Settings',
+            headerTitle: "Settings",
             headerStyle: {
-              backgroundColor: Colors[colorScheme ?? 'light'].card,
+              backgroundColor: Colors[colorScheme ?? "light"].card,
             },
-            headerTintColor: Colors[colorScheme ?? 'light'].primary,
+            headerTintColor: Colors[colorScheme ?? "light"].primary,
             headerShadowVisible: false,
           }}
         />
         <Stack.Screen
           name="modal"
-          options={{ presentation: 'modal', title: 'Modal' }}
+          options={{ presentation: "modal", title: "Modal" }}
         />
       </Stack>
-      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
+      <StatusBar style="light" />
     </ThemeProvider>
   );
 }

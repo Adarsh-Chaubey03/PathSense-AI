@@ -1,34 +1,33 @@
-import { useRouter } from 'expo-router';
-import { StyleSheet, View, ScrollView } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from "expo-router";
+import { StyleSheet, View, ScrollView } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Card, Button } from '@/components/ui';
-import { StatusBadge } from '@/src/components/common/StatusBadge';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { Spacing, Shadows, BorderRadius, Palette } from '@/constants/theme';
+import { ThemedText } from "@/components/themed-text";
+import { ThemedView } from "@/components/themed-view";
+import { Card, Button } from "@/components/ui";
+import { StatusBadge } from "@/src/components/common/StatusBadge";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { Spacing, BorderRadius, Palette } from "@/constants/theme";
 import {
   getFallEvent,
   transitionFallEvent,
-} from '@/src/state/fall-event-store';
+} from "@/src/state/fall-event-store";
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const cardBg = useThemeColor({}, 'card');
-  const primaryLight = useThemeColor({}, 'primaryLight');
-  const accentLight = useThemeColor({}, 'accentLight');
+  const primaryLight = useThemeColor({}, "primaryLight");
+  const accentLight = useThemeColor({}, "accentLight");
 
   const handleStartMonitoring = (): void => {
-    if (getFallEvent().state === 'IDLE') {
-      transitionFallEvent('MONITORING', 'Monitoring started from home');
+    if (getFallEvent().state === "IDLE") {
+      transitionFallEvent("MONITORING", "Monitoring started from home");
     }
-    router.push('/monitoring');
+    router.push("/monitoring");
   };
 
   const handleOpenSettings = (): void => {
-    router.push('/settings');
+    router.push("/settings");
   };
 
   return (
@@ -37,7 +36,10 @@ export default function HomeScreen() {
         style={styles.scrollView}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + Spacing.lg, paddingBottom: insets.bottom + Spacing.xxl },
+          {
+            paddingTop: insets.top + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -60,16 +62,19 @@ export default function HomeScreen() {
         </Card>
 
         {/* Main Action Card */}
-        <Card variant="glass" style={[styles.actionCard, { borderColor: primaryLight }]}>
+        <Card
+          variant="glass"
+          style={[styles.actionCard, { borderColor: primaryLight }]}
+        >
           <View style={[styles.actionIcon, { backgroundColor: primaryLight }]}>
-            <ThemedText style={styles.iconText}>{'>'}</ThemedText>
+            <ThemedText style={styles.iconText}>{">"}</ThemedText>
           </View>
           <ThemedText type="subtitle" style={styles.actionTitle}>
             Start Monitoring
           </ThemedText>
           <ThemedText type="caption" style={styles.actionDescription}>
-            Begin fall detection monitoring. We&apos;ll track your movement
-            and alert your emergency contacts if a fall is detected.
+            Begin fall detection monitoring. We&apos;ll track your movement and
+            alert your emergency contacts if a fall is detected.
           </ThemedText>
           <Button
             title="Start Monitoring"
@@ -132,15 +137,15 @@ const styles = StyleSheet.create({
     gap: Spacing.lg,
   },
   header: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: Spacing.xl,
   },
   title: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   subtitle: {
     marginTop: Spacing.xs,
-    textAlign: 'center',
+    textAlign: "center",
   },
   statusCard: {
     gap: Spacing.md,
@@ -149,7 +154,7 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   actionCard: {
-    alignItems: 'center',
+    alignItems: "center",
     borderWidth: 1,
     gap: Spacing.md,
   },
@@ -157,51 +162,51 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: BorderRadius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: Spacing.sm,
   },
   iconText: {
     fontSize: 24,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Palette.white,
   },
   actionTitle: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   actionDescription: {
-    textAlign: 'center',
+    textAlign: "center",
     paddingHorizontal: Spacing.md,
   },
   actionButton: {
     marginTop: Spacing.md,
   },
   infoGrid: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: Spacing.md,
   },
   infoCard: {
     flex: 1,
-    alignItems: 'center',
+    alignItems: "center",
     gap: Spacing.sm,
   },
   infoIcon: {
     width: 44,
     height: 44,
     borderRadius: BorderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   infoIconText: {
     fontSize: 12,
-    fontWeight: '700',
+    fontWeight: "700",
     color: Palette.charcoal,
   },
   infoTitle: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   infoText: {
-    textAlign: 'center',
+    textAlign: "center",
   },
   settingsButton: {
     marginTop: Spacing.sm,
