@@ -43,6 +43,56 @@ The core sensing loop does not depend on public internet APIs. Optional alert de
 6. If the user asks for help or does not respond, SOS escalation is triggered.
 7. Emergency contacts are notified and the incident is logged.
 
+### Fall Detection Pipeline
+
+```
+IMU Input (Accelerometer + Gyroscope)
+                ↓
+Pre-Processing & Range Filtering
+(Detect impact in threshold range e.g. 2g – 4g)
+                ↓
+       AI Fall Detection Layer
+                ↓
+ ┌───────────────────────────────┐
+ │ Dual Model Evaluation         │
+ │ - Model M1 (Motion Pattern)   │
+ │ - Model M2 (Fall Likelihood)  │
+ └───────────────────────────────┘
+                ↓
+   [Combined Confidence Score]
+                ↓
+       [User Confirmation]
+   (System asks: "Are you okay?")
+                ↓
+ ┌───────────────────────────────┐
+ │ User Response Handling        │
+ │                               │
+ │ "OK / Yes"  → Cancel Alert    │
+ │                               │
+ │ "No / Help" → Emergency Flow  │
+ │                               │
+ │ No Response → Emergency Flow  │
+ └───────────────────────────────┘
+                ↓
+      [Priority Scoring Engine]
+(Combine model confidence + user response)
+                ↓
+ ┌───────────────────────────────┐
+ │ Decision Layer                │
+ │                               │
+ │ Medium Priority → Notify      │
+ │ Contacts (SMS)                │
+ │                               │
+ │ High Priority → Emergency     │
+ │ Service / Ambulance           │
+ └───────────────────────────────┘
+                ↓
+           [SOS Trigger]
+             (SMS)
+                ↓
+              END
+```
+
 ## Tech Stack
 
 - Mobile: React Native, Expo, Expo Router, Expo Sensors, Expo Speech
@@ -112,5 +162,5 @@ pip install -r requirements-gpu.txt
 ## Team Info
 
 - Team: Ved Vahini
-- Members: Adarsh Chaubey(Lead), Sakshi Gupta, Aditya Laxkar, Abhinav Patra
+- Members: Adarsh Chaubey, Sakshi Gupta, Aditya Laxkar, Abhinav Patra
 - Track: Problem Statement 5

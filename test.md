@@ -75,7 +75,6 @@ List **all major libraries, frameworks, and SDKs** used.
 | Bun | >=1.0.0 | JavaScript runtime and backend dev server | MIT |
 | PyTorch | Not pinned in repo | ML model training and inference | BSD-3-Clause |
 | ONNX Runtime | >=1.22,<2 | Optimized model inference runtime | MIT |
-| Redis | Not specified | Location caching | Not specified |
 | VectorDB | Not specified | Efficient mapping and retrieval of data points | Not specified |
 
 ---
@@ -86,7 +85,7 @@ Teams must **explicitly disclose all AI usage**.
 
 ### AI Models
 
-- **Model Name**:
+- **Model Name**: PATHSENSE-AI
 - **Provider**: self
 - **Used For** : Identifying Potential Fall values
 - **Access Method**:
@@ -96,11 +95,11 @@ Teams must **explicitly disclose all AI usage**.
 
 ### AI Tools / Platforms
 
-- **Tool Name**:
-- **Role in Project**:
+- **Tool Name**: Github Copilot
+- **Role in Project**: Code suggestion and productivity assistance
 - **Level of Dependency**:
-  - [ ] Assistive
-  - [x] Core Logic
+  - [X] Assistive
+  - [] Core Logic
   - [ ] Entire Solution
 
 ---
@@ -115,7 +114,7 @@ The following must be declared clearly:
 
 ### If Yes:
 
-- **Agent Name / Platform**:
+- **Agent Name / Platform**: Github Copilot
 - **Capabilities Used**:
   - [x] Code generation
   - [ ] Full app scaffolding
