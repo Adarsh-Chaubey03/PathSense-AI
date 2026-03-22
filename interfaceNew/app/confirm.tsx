@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { StyleSheet, View, ScrollView } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
+import { StyleSheet, View, ScrollView, Platform, Vibration } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { ThemedText } from '@/components/themed-text';
@@ -32,6 +33,7 @@ export default function ConfirmScreen() {
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
   const [isEscalating, setIsEscalating] = useState(false);
   const [mlData, setMlData] = useState<MLDetectionData | undefined>(undefined);
+  const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     const detectionData = getMLDetectionResult();
@@ -58,9 +60,43 @@ export default function ConfirmScreen() {
       transitionFallEvent('CONFIRMING', 'Recovered confirmation state');
     }
 
-    void playConfirmationPromptHaptic();
-    void speakConfirmationPrompt();
   }, []);
+
+  const stopContinuousPromptHaptic = useCallback(() => {
+    if (vibrationIntervalRef.current) {
+      clearInterval(vibrationIntervalRef.current);
+      vibrationIntervalRef.current = null;
+    }
+
+    if (Platform.OS === 'android') {
+      Vibration.cancel();
+    }
+  }, []);
+
+  const startContinuousPromptHaptic = useCallback(() => {
+    stopContinuousPromptHaptic();
+
+    if (Platform.OS === 'android') {
+      Vibration.vibrate([0, 700, 450], true);
+      return;
+    }
+
+    void playConfirmationPromptHaptic();
+    vibrationIntervalRef.current = setInterval(() => {
+      void playConfirmationPromptHaptic();
+    }, 1200);
+  }, [stopContinuousPromptHaptic]);
+
+  useFocusEffect(
+    useCallback(() => {
+      startContinuousPromptHaptic();
+      void speakConfirmationPrompt();
+
+      return () => {
+        stopContinuousPromptHaptic();
+      };
+    }, [startContinuousPromptHaptic, stopContinuousPromptHaptic])
+  );
 
   const getStatusMessage = (): string => {
     if (!mlData) {

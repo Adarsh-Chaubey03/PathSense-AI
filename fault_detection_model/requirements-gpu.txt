@@ -9,3 +9,4 @@ PyYAML>=6.0,<7
 onnx>=1.18,<2
 onnxruntime-gpu>=1.22,<2
 tensorboard>=2.19,<3
+torch>=2.10,<3
