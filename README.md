@@ -146,11 +146,14 @@ pip install -r requirements-gpu.txt
 
 ### 4. Demo flow
 
-1. Start the backend and the mobile app.
+1. Start the backend server and launch the mobile application.
 2. Configure emergency contacts from the Settings screen.
-3. Open Live Monitoring.
-4. Use a controlled motion test or the built-in `Simulate fall candidate` action.
-5. Review the confirmation screen and choose `YES - I'm OK` or `NO - Send Emergency SOS`.
+3. Open the Live Monitoring module.
+4. Trigger a fall event using a controlled motion test or the “Simulate fall” option.
+5. On detection, the device vibrates and shows a confirmation screen:
+
+   * Any screen interaction within the timeout cancels the alert.
+   * No interaction results in automatic emergency SOS dispatch.
 
 ## Future Scope
 
@@ -162,5 +165,5 @@ pip install -r requirements-gpu.txt
 ## Team Info
 
 - Team: Ved Vahini
-- Members: Adarsh Chaubey, Sakshi Gupta, Aditya Laxkar, Abhinav Patra
+- Members: Adarsh Chaubey, Aditya Laxkar, Abhinav Patra, Sakshi Gupta
 - Track: Problem Statement 5

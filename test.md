@@ -192,6 +192,6 @@ Briefly explain:
 > We confirm that all information provided above is accurate.  
 > We understand that misrepresentation may lead to disqualification.
 
-**Team Representative Name**:
+**Team Representative Name**: Adarsh Chuabey
 
 ---
