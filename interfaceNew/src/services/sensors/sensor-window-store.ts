@@ -24,6 +24,7 @@ export interface SensorWindowData {
 const WINDOW_DURATION_MS = 2000; // 2 seconds window
 const TARGET_SAMPLE_RATE_HZ = 50;
 const TARGET_WINDOW_SAMPLES = 100;
+const MIN_WINDOW_DURATION_MS = 1800;
 const MAX_RETENTION_MS = 4000;
 const MAX_BUFFER_SAMPLES = TARGET_WINDOW_SAMPLES * 4;
 
@@ -98,11 +99,86 @@ class SensorWindowStore {
     return normalizedSamples;
   }
 
+  private normalizeWindowToTargetSamples(
+    sourceSamples: RawSensorDataPoint[],
+    targetSamples: number = TARGET_WINDOW_SAMPLES,
+  ): RawSensorDataPoint[] {
+    if (sourceSamples.length === 0 || targetSamples <= 0) {
+      return [];
+    }
+
+    if (sourceSamples.length === targetSamples) {
+      return sourceSamples;
+    }
+
+    if (sourceSamples.length === 1) {
+      const only = sourceSamples[0];
+      return Array.from({ length: targetSamples }, (_, index) => ({
+        ...only,
+        timestamp: only.timestamp + index,
+      }));
+    }
+
+    const startTs = sourceSamples[0].timestamp;
+    const endTs = sourceSamples[sourceSamples.length - 1].timestamp;
+    const duration = Math.max(1, endTs - startTs);
+
+    const normalized: RawSensorDataPoint[] = [];
+    let leftIndex = 0;
+
+    for (let i = 0; i < targetSamples; i += 1) {
+      const ratio = targetSamples === 1 ? 0 : i / (targetSamples - 1);
+      const targetTs = startTs + ratio * duration;
+
+      while (
+        leftIndex < sourceSamples.length - 2 &&
+        sourceSamples[leftIndex + 1].timestamp < targetTs
+      ) {
+        leftIndex += 1;
+      }
+
+      const left = sourceSamples[leftIndex];
+      const right = sourceSamples[Math.min(leftIndex + 1, sourceSamples.length - 1)];
+
+      const segmentDuration = Math.max(1, right.timestamp - left.timestamp);
+      const alpha = Math.max(0, Math.min(1, (targetTs - left.timestamp) / segmentDuration));
+
+      normalized.push({
+        acc_x: left.acc_x + (right.acc_x - left.acc_x) * alpha,
+        acc_y: left.acc_y + (right.acc_y - left.acc_y) * alpha,
+        acc_z: left.acc_z + (right.acc_z - left.acc_z) * alpha,
+        gyro_x: left.gyro_x + (right.gyro_x - left.gyro_x) * alpha,
+        gyro_y: left.gyro_y + (right.gyro_y - left.gyro_y) * alpha,
+        gyro_z: left.gyro_z + (right.gyro_z - left.gyro_z) * alpha,
+        timestamp: Math.round(targetTs),
+      });
+    }
+
+    return normalized;
+  }
+
   /**
    * Get the current sensor window data for API call
    */
   getWindowForApiCall(): SensorWindowData | null {
-    const windowSamples = this.getLatestWindowSamples();
+    const rawWindowSamples = this.getLatestWindowSamples();
+
+    if (rawWindowSamples.length === 0) {
+      return null;
+    }
+
+    const windowDurationMs =
+      rawWindowSamples[rawWindowSamples.length - 1].timestamp -
+      rawWindowSamples[0].timestamp;
+
+    if (windowDurationMs < MIN_WINDOW_DURATION_MS) {
+      return null;
+    }
+
+    const windowSamples = this.normalizeWindowToTargetSamples(
+      rawWindowSamples,
+      TARGET_WINDOW_SAMPLES,
+    );
 
     if (windowSamples.length === 0) {
       return null;
@@ -127,7 +203,12 @@ class SensorWindowStore {
    * Get model-ready 2-second window in [[acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z], ...]
    */
   getWindowForML(): number[][] {
-    return this.getLatestWindowSamples().map((sample) => [
+    const window = this.getWindowForApiCall();
+    if (!window) {
+      return [];
+    }
+
+    return window.samples.map((sample) => [
       sample.acc_x,
       sample.acc_y,
       sample.acc_z,

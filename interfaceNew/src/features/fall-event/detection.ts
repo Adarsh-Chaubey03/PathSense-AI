@@ -1,6 +1,7 @@
 import type { SensorSample } from "@/src/services/sensors/sensor-adapter";
 import {
   edgeFallFilter,
+  getEdgeFilterThresholds,
   type EdgeFilterResult,
   type WindowStats,
 } from "./edge-filter";
@@ -110,3 +111,5 @@ export function isEdgeFilterInCooldown(): boolean {
 export function getEdgeFilterCooldownMs(): number {
   return edgeFallFilter.getCooldownRemainingMs();
 }
+
+export { getEdgeFilterThresholds };

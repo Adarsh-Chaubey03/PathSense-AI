@@ -22,6 +22,18 @@ export interface WindowStats {
   sampleCount: number;
 }
 
+export interface EdgeFilterThresholds {
+  gravityEarth: number;
+  accTriggerG: number;
+  gyroTriggerRadS: number;
+  accReleaseG: number;
+  gyroReleaseRadS: number;
+  minAboveTriggerMs: number;
+  releaseHoldMs: number;
+  cooldownMs: number;
+  windowSize: number;
+}
+
 // Configuration constants
 const WINDOW_SIZE = 30;
 const GRAVITY_EARTH = 9.81;
@@ -35,6 +47,20 @@ const GYRO_RELEASE_THRESHOLD_RAD_S = 190.09357073128868 * DEG_TO_RAD;
 const MIN_ABOVE_TRIGGER_MS = 60;
 const RELEASE_HOLD_MS = 250;
 const COOLDOWN_MS = 1200;
+
+export function getEdgeFilterThresholds(): EdgeFilterThresholds {
+  return {
+    gravityEarth: GRAVITY_EARTH,
+    accTriggerG: ACC_TRIGGER_THRESHOLD_G,
+    gyroTriggerRadS: GYRO_TRIGGER_THRESHOLD_RAD_S,
+    accReleaseG: ACC_RELEASE_THRESHOLD_G,
+    gyroReleaseRadS: GYRO_RELEASE_THRESHOLD_RAD_S,
+    minAboveTriggerMs: MIN_ABOVE_TRIGGER_MS,
+    releaseHoldMs: RELEASE_HOLD_MS,
+    cooldownMs: COOLDOWN_MS,
+    windowSize: WINDOW_SIZE,
+  };
+}
 
 interface SlidingWindowSample {
   accMagG: number;
