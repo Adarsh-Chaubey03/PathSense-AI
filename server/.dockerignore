@@ -1,0 +1,14 @@
+node_modules
+.git
+.gitignore
+.env
+.env.*
+npm-debug.log*
+bun-debug.log*
+server_test.log
+server_test.err
+coverage
+dist
+build
+.DS_Store
+Thumbs.db

@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: pathsense-backend
+    runtime: docker
+    rootDir: server
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_BIN
+        value: python3
+      - key: FALL_DETECT_TIMEOUT_MS
+        value: "20000"
+      - key: DEMO_MODE
+        value: "true"
+      - key: SMS_MAX_RETRIES
+        value: "2"
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
