@@ -49,6 +49,8 @@ export function Button({
   const secondaryColor = useThemeColor({}, "secondary");
   const successColor = useThemeColor({}, "success");
   const dangerColor = useThemeColor({}, "danger");
+  const borderColor = useThemeColor({}, "borderLight");
+  const shadowColor = useThemeColor({}, "shadow");
 
   const getBackgroundColor = () => {
     if (disabled) return Palette.mediumGray;
@@ -117,11 +119,13 @@ export function Button({
         styles.base,
         getSizeStyle(),
         { backgroundColor },
+        { borderColor },
         variant === "outline" && [
           styles.outline,
           { borderColor: primaryColor },
         ],
-        variant !== "ghost" && variant !== "outline" && Shadows.sm,
+        variant !== "ghost" &&
+          variant !== "outline" && [{ shadowColor }, Shadows.sm],
         fullWidth && styles.fullWidth,
         disabled && styles.disabled,
         style,
@@ -153,10 +157,11 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: BorderRadius.md,
+    borderRadius: BorderRadius.sm,
     alignItems: "center",
     justifyContent: "center",
     flexDirection: "row",
+    borderWidth: 1,
   },
   sizeSm: {
     paddingVertical: Spacing.sm,
@@ -171,10 +176,10 @@ const styles = StyleSheet.create({
   sizeLg: {
     paddingVertical: Spacing.lg,
     paddingHorizontal: Spacing.xl,
-    minHeight: 56,
+    minHeight: 54,
   },
   outline: {
-    borderWidth: 2,
+    borderWidth: 1,
   },
   fullWidth: {
     width: "100%",
@@ -188,8 +193,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   text: {
-    fontWeight: "600",
-    letterSpacing: 0.3,
+    fontWeight: "700",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
   },
   iconLeft: {
     marginRight: Spacing.sm,

@@ -1,88 +1,88 @@
 /**
- * Soft anime-inspired theme with pastel colors and gentle gradients.
- * Light-themed, minimal, and calming aesthetic.
+ * Noir-inspired theme with charcoal surfaces, parchment text, and crimson accents.
+ * Built for a sleek, dramatic, high-contrast safety interface.
  */
 
-import { Platform } from 'react-native';
+import { Platform } from "react-native";
 
-// Primary palette - soft pastels
+// Primary palette - noir / gothic
 export const Palette = {
-  // Primary accent - soft lavender/purple
-  primary: '#9B8FE4',
-  primaryLight: '#C4BAFF',
-  primaryDark: '#7B6FD4',
+  // Primary text/accent family
+  primary: "#D4CCBE",
+  primaryLight: "#ECE4D6",
+  primaryDark: "#A59C8E",
 
-  // Secondary - soft pink/rose
-  secondary: '#F5A9B8',
-  secondaryLight: '#FFD1DC',
-  secondaryDark: '#E589A0',
+  // Secondary neutrals
+  secondary: "#8E8779",
+  secondaryLight: "#B9B2A4",
+  secondaryDark: "#625D53",
 
-  // Accent - soft mint/teal
-  accent: '#7ECEC0',
-  accentLight: '#A8E6CF',
-  accentDark: '#5EBEA8',
+  // Accent - blood crimson
+  accent: "#A41C30",
+  accentLight: "#CF5D6E",
+  accentDark: "#741321",
 
-  // Success - soft green
-  success: '#88D498',
-  successLight: '#B8E6C0',
-  successDark: '#68C478',
+  // Success - muted steel
+  success: "#7D857A",
+  successLight: "#A0A89D",
+  successDark: "#5C6459",
 
-  // Warning - soft amber
-  warning: '#F7D794',
-  warningLight: '#FFE8B8',
-  warningDark: '#E7C774',
+  // Warning - antique gold
+  warning: "#A88452",
+  warningLight: "#C4A57C",
+  warningDark: "#7A5F39",
 
-  // Danger/Alert - soft coral (not harsh red)
-  danger: '#FF8A80',
-  dangerLight: '#FFB8B0',
-  dangerDark: '#FF6B60',
+  // Danger/Alert - emergency crimson
+  danger: "#C11638",
+  dangerLight: "#DB5E78",
+  dangerDark: "#890F27",
 
   // Neutrals
-  white: '#FFFFFF',
-  cream: '#FEFBF6',
-  ivory: '#F8F6F4',
-  lightGray: '#F0EEF6',
-  mediumGray: '#D4D2E0',
-  gray: '#9896A4',
-  darkGray: '#6B6980',
-  charcoal: '#3D3B4A',
-  dark: '#1A1825',
+  white: "#F4F0E8",
+  cream: "#0B0B0D",
+  ivory: "#121214",
+  lightGray: "#1D1D21",
+  mediumGray: "#333339",
+  gray: "#6D6A66",
+  darkGray: "#A39C90",
+  charcoal: "#E3DDD0",
+  dark: "#070709",
 
   // Transparent overlays
-  glassWhite: 'rgba(255, 255, 255, 0.75)',
-  glassLight: 'rgba(255, 255, 255, 0.5)',
-  glassDark: 'rgba(26, 24, 37, 0.08)',
-  shadow: 'rgba(155, 143, 228, 0.15)',
+  glassWhite: "rgba(20, 20, 24, 0.82)",
+  glassLight: "rgba(20, 20, 24, 0.62)",
+  glassDark: "rgba(4, 4, 6, 0.42)",
+  shadow: "rgba(0, 0, 0, 0.55)",
 };
 
 // Gradient definitions
 export const Gradients = {
-  primary: ['#C4BAFF', '#9B8FE4'],
-  secondary: ['#FFD1DC', '#F5A9B8'],
-  accent: ['#A8E6CF', '#7ECEC0'],
-  success: ['#B8E6C0', '#88D498'],
-  warning: ['#FFE8B8', '#F7D794'],
-  danger: ['#FFB8B0', '#FF8A80'],
-  background: ['#FEFBF6', '#F8F6F4'],
-  card: ['#FFFFFF', '#FEFBF6'],
-  glass: ['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.7)'],
+  primary: ["#ECE4D6", "#D4CCBE"],
+  secondary: ["#B9B2A4", "#8E8779"],
+  accent: ["#CF5D6E", "#A41C30"],
+  success: ["#A0A89D", "#7D857A"],
+  warning: ["#C4A57C", "#A88452"],
+  danger: ["#DB5E78", "#C11638"],
+  background: ["#121214", "#070709"],
+  card: ["#1D1D21", "#121214"],
+  glass: ["rgba(24, 24, 29, 0.9)", "rgba(20, 20, 24, 0.7)"],
 };
 
 export const Colors = {
   light: {
     text: Palette.charcoal,
-    textSecondary: Palette.gray,
-    textMuted: Palette.mediumGray,
+    textSecondary: Palette.darkGray,
+    textMuted: Palette.gray,
     background: Palette.cream,
     backgroundAlt: Palette.ivory,
-    card: Palette.white,
+    card: Palette.lightGray,
     cardAlt: Palette.lightGray,
     tint: Palette.primary,
-    icon: Palette.gray,
-    tabIconDefault: Palette.mediumGray,
+    icon: Palette.darkGray,
+    tabIconDefault: Palette.gray,
     tabIconSelected: Palette.primary,
-    border: Palette.lightGray,
-    borderLight: 'rgba(155, 143, 228, 0.2)',
+    border: Palette.mediumGray,
+    borderLight: "rgba(212, 204, 190, 0.22)",
 
     // Semantic colors
     primary: Palette.primary,
@@ -104,38 +104,38 @@ export const Colors = {
     shadow: Palette.shadow,
   },
   dark: {
-    text: '#ECEDEE',
-    textSecondary: '#9BA1A6',
-    textMuted: '#687076',
+    text: "#E3DDD0",
+    textSecondary: "#A39C90",
+    textMuted: "#6D6A66",
     background: Palette.dark,
-    backgroundAlt: '#242230',
-    card: '#2A2838',
-    cardAlt: '#333140',
-    tint: Palette.primaryLight,
-    icon: '#9BA1A6',
-    tabIconDefault: '#9BA1A6',
-    tabIconSelected: Palette.primaryLight,
-    border: '#333140',
-    borderLight: 'rgba(196, 186, 255, 0.15)',
+    backgroundAlt: "#121214",
+    card: "#1A1A1E",
+    cardAlt: "#232328",
+    tint: Palette.primary,
+    icon: "#A39C90",
+    tabIconDefault: "#6D6A66",
+    tabIconSelected: Palette.primary,
+    border: "#2A2A30",
+    borderLight: "rgba(212, 204, 190, 0.18)",
 
-    // Semantic colors (slightly muted for dark mode)
-    primary: Palette.primaryLight,
-    primaryLight: Palette.primary,
-    secondary: Palette.secondaryLight,
-    secondaryLight: Palette.secondary,
-    accent: Palette.accentLight,
-    accentLight: Palette.accent,
-    success: Palette.successLight,
-    successLight: Palette.success,
-    warning: Palette.warningLight,
-    warningLight: Palette.warning,
-    danger: Palette.dangerLight,
-    dangerLight: Palette.danger,
+    // Semantic colors
+    primary: Palette.primary,
+    primaryLight: Palette.primaryLight,
+    secondary: Palette.secondary,
+    secondaryLight: Palette.secondaryLight,
+    accent: Palette.accent,
+    accentLight: Palette.accentLight,
+    success: Palette.success,
+    successLight: Palette.successLight,
+    warning: Palette.warning,
+    warningLight: Palette.warningLight,
+    danger: Palette.danger,
+    dangerLight: Palette.dangerLight,
 
     // Glass effects
-    glass: 'rgba(42, 40, 56, 0.85)',
-    glassLight: 'rgba(42, 40, 56, 0.6)',
-    shadow: 'rgba(0, 0, 0, 0.3)',
+    glass: "rgba(18, 18, 22, 0.85)",
+    glassLight: "rgba(18, 18, 22, 0.62)",
+    shadow: "rgba(0, 0, 0, 0.6)",
   },
 };
 
@@ -192,21 +192,22 @@ export const Shadows = {
 
 export const Fonts = Platform.select({
   ios: {
-    sans: 'system-ui',
-    serif: 'ui-serif',
-    rounded: 'ui-rounded',
-    mono: 'ui-monospace',
+    sans: "system-ui",
+    serif: "ui-serif",
+    rounded: "ui-rounded",
+    mono: "ui-monospace",
   },
   default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+    sans: "normal",
+    serif: "serif",
+    rounded: "normal",
+    mono: "monospace",
   },
   web: {
     sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
     serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
+    rounded:
+      "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
     mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
   },
 });

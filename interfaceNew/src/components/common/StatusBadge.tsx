@@ -19,7 +19,13 @@ const STATE_CONFIG: Record<
   {
     label: string;
     description: string;
-    colorKey: "primary" | "success" | "warning" | "danger" | "accent";
+    colorKey:
+      | "primary"
+      | "secondary"
+      | "success"
+      | "warning"
+      | "danger"
+      | "accent";
     lightKey:
       | "primaryLight"
       | "successLight"
@@ -29,51 +35,51 @@ const STATE_CONFIG: Record<
   }
 > = {
   IDLE: {
-    label: "Idle",
-    description: "Monitoring inactive",
-    colorKey: "primary",
+    label: "IDLE",
+    description: "Monitoring paused",
+    colorKey: "secondary",
     lightKey: "primaryLight",
   },
   MONITORING: {
-    label: "Active",
-    description: "Monitoring your safety",
-    colorKey: "success",
+    label: "ACTIVE",
+    description: "Realtime safety monitoring",
+    colorKey: "primary",
     lightKey: "successLight",
   },
   CANDIDATE: {
-    label: "Detecting",
-    description: "Analyzing motion pattern",
+    label: "ANALYZING",
+    description: "Evaluating motion spike",
     colorKey: "warning",
     lightKey: "warningLight",
   },
   CONFIRMING: {
-    label: "Confirming",
-    description: "Waiting for your response",
+    label: "CONFIRM",
+    description: "Awaiting user response",
     colorKey: "warning",
     lightKey: "warningLight",
   },
   ALERTING: {
-    label: "Alert",
-    description: "Dispatching emergency alert",
-    colorKey: "danger",
+    label: "ALERT",
+    description: "Dispatch in progress",
+    colorKey: "accent",
     lightKey: "dangerLight",
   },
   ESCALATING: {
-    label: "Escalating",
-    description: "Contacting emergency services",
+    label: "ESCALATING",
+    description: "Notifying emergency contacts",
     colorKey: "danger",
     lightKey: "dangerLight",
   },
   RESOLVED: {
-    label: "Resolved",
-    description: "Event completed",
-    colorKey: "success",
+    label: "RESOLVED",
+    description: "Incident flow completed",
+    colorKey: "secondary",
     lightKey: "successLight",
   },
   FALSE_ALARM: {
-    label: "Dismissed",
-    description: "False alarm confirmed",
-    colorKey: "accent",
+    label: "CLEAR",
+    description: "False alarm acknowledged",
+    colorKey: "success",
     lightKey: "accentLight",
   },
 };
@@ -85,6 +91,7 @@ export function StatusBadge({
   const config = STATE_CONFIG[state];
 
   const primary = useThemeColor({}, "primary");
+  const secondary = useThemeColor({}, "secondary");
   const success = useThemeColor({}, "success");
   const warning = useThemeColor({}, "warning");
   const danger = useThemeColor({}, "danger");
@@ -100,6 +107,8 @@ export function StatusBadge({
     switch (config.colorKey) {
       case "success":
         return success;
+      case "secondary":
+        return secondary;
       case "warning":
         return warning;
       case "danger":
@@ -165,7 +174,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: Spacing.sm,
-    paddingVertical: Spacing.xs + 1,
+    paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
   },
   dot: {
@@ -176,12 +185,12 @@ const styles = StyleSheet.create({
   },
   label: {
     color: Palette.white,
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "600",
-    letterSpacing: 0.2,
+    letterSpacing: 0.9,
   },
   description: {
-    lineHeight: 18,
-    opacity: 0.75,
+    lineHeight: 17,
+    opacity: 0.72,
   },
 });

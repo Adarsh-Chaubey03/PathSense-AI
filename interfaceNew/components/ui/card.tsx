@@ -3,36 +3,40 @@
  * Supports variants: default, elevated, glass
  */
 
-import { StyleSheet, View, type ViewProps } from 'react-native';
-import { useThemeColor } from '@/hooks/use-theme-color';
-import { BorderRadius, Shadows, Spacing } from '@/constants/theme';
+import { StyleSheet, View, type ViewProps } from "react-native";
+import { useThemeColor } from "@/hooks/use-theme-color";
+import { BorderRadius, Shadows, Spacing } from "@/constants/theme";
 
-export type CardVariant = 'default' | 'elevated' | 'glass' | 'outlined';
+export type CardVariant = "default" | "elevated" | "glass" | "outlined";
 
 export type CardProps = ViewProps & {
   variant?: CardVariant;
-  padding?: 'none' | 'sm' | 'md' | 'lg';
+  padding?: "none" | "sm" | "md" | "lg";
 };
 
 export function Card({
   style,
-  variant = 'default',
-  padding = 'md',
+  variant = "default",
+  padding = "md",
   children,
   ...props
 }: CardProps) {
-  const backgroundColor = useThemeColor({}, variant === 'glass' ? 'glass' : 'card');
-  const borderColor = useThemeColor({}, 'borderLight');
+  const backgroundColor = useThemeColor(
+    {},
+    variant === "glass" ? "glass" : "card",
+  );
+  const borderColor = useThemeColor({}, "borderLight");
+  const shadowColor = useThemeColor({}, "shadow");
 
   const getPaddingStyle = () => {
     switch (padding) {
-      case 'none':
+      case "none":
         return { padding: 0 };
-      case 'sm':
+      case "sm":
         return { padding: Spacing.md };
-      case 'md':
+      case "md":
         return { padding: Spacing.lg };
-      case 'lg':
+      case "lg":
         return { padding: Spacing.xl };
       default:
         return { padding: Spacing.lg };
@@ -41,14 +45,14 @@ export function Card({
 
   const getVariantStyle = () => {
     switch (variant) {
-      case 'elevated':
-        return [styles.elevated, Shadows.md];
-      case 'glass':
-        return [styles.glass, { borderColor }];
-      case 'outlined':
+      case "elevated":
+        return [styles.elevated, { borderColor }, { shadowColor }, Shadows.md];
+      case "glass":
+        return [styles.glass, { borderColor }, { shadowColor }, Shadows.sm];
+      case "outlined":
         return [styles.outlined, { borderColor }];
       default:
-        return [styles.default, Shadows.sm];
+        return [styles.default, { borderColor }, { shadowColor }, Shadows.sm];
     }
   };
 
@@ -71,16 +75,18 @@ export function Card({
 const styles = StyleSheet.create({
   base: {
     borderRadius: BorderRadius.lg,
-    overflow: 'hidden',
+    overflow: "hidden",
+    borderWidth: 1,
   },
   default: {},
-  elevated: {},
+  elevated: {
+    borderWidth: 1,
+  },
   glass: {
     borderWidth: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
   },
   outlined: {
     borderWidth: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: "transparent",
   },
 });
