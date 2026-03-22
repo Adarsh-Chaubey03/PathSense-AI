@@ -1,9 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "expo-router";
-import { StyleSheet, TouchableOpacity, View } from "react-native";
+import { ScrollView, StyleSheet, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ThemedText } from "@/components/themed-text";
 import { ThemedView } from "@/components/themed-view";
+import { Button, Card } from "@/components/ui";
+import { BorderRadius, Spacing } from "@/constants/theme";
+import { useThemeColor } from "@/hooks/use-theme-color";
 import { ConfirmationStatusCard } from "@/src/components/confirmation/ConfirmationStatusCard";
 import { CountdownTimer } from "@/src/components/common/CountdownTimer";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
@@ -25,11 +29,16 @@ const COUNTDOWN_SECONDS = CONFIRMATION_TIMEOUT_SECONDS;
 
 export default function ConfirmScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const event = useFallEvent();
   const [secondsLeft, setSecondsLeft] = useState(COUNTDOWN_SECONDS);
   const [isEscalating, setIsEscalating] = useState(false);
   const [mlData, setMlData] = useState<MLDetectionData | undefined>(undefined);
   const safeConfirmedRef = useRef(false);
+
+  const successColor = useThemeColor({}, "success");
+  const dangerColor = useThemeColor({}, "danger");
+  const warningColor = useThemeColor({}, "warning");
 
   useEffect(() => {
     // Get ML detection result from store
@@ -144,50 +153,93 @@ export default function ConfirmScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title">Are you okay?</ThemedText>
-
-      <ConfirmationStatusCard message={getStatusMessage()} />
-
-      {mlData && (
-        <View style={styles.mlInfoContainer}>
-          <ThemedText style={styles.mlInfo}>
-            ML Result: {mlData.result}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: insets.top + Spacing.lg,
+            paddingBottom: insets.bottom + Spacing.xxl,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.header}>
+          <ThemedText type="hero" style={styles.title}>
+            Are you okay?
           </ThemedText>
-          <ThemedText style={styles.mlInfo}>
-            Fall probability: {(mlData.fallProbability * 100).toFixed(1)}%
+          <ThemedText type="caption" style={styles.subtitle}>
+            Respond to confirm your safety before the countdown ends.
           </ThemedText>
-          <ThemedText style={styles.mlInfo}>
-            Samples analyzed: {mlData.sampleCount}
-          </ThemedText>
+          <StatusBadge state={event.state} />
         </View>
-      )}
 
-      <CountdownTimer secondsLeft={secondsLeft} />
+        <ConfirmationStatusCard
+          message={getStatusMessage()}
+          variant={secondsLeft <= 10 ? "danger" : "warning"}
+        />
 
-      <StatusBadge state={event.state} />
+        {mlData && (
+          <Card variant="outlined" padding="md" style={styles.mlInfoContainer}>
+            <ThemedText type="label" style={styles.cardTitle}>
+              ML Detection Summary
+            </ThemedText>
+            <View style={styles.mlRow}>
+              <ThemedText type="caption">Model result</ThemedText>
+              <ThemedText type="defaultSemiBold">{mlData.result}</ThemedText>
+            </View>
+            <View style={styles.mlRow}>
+              <ThemedText type="caption">Fall probability</ThemedText>
+              <ThemedText type="defaultSemiBold">
+                {(mlData.fallProbability * 100).toFixed(1)}%
+              </ThemedText>
+            </View>
+            <View style={styles.mlRow}>
+              <ThemedText type="caption">Samples analyzed</ThemedText>
+              <ThemedText type="defaultSemiBold">{mlData.sampleCount}</ThemedText>
+            </View>
+          </Card>
+        )}
 
-      <TouchableOpacity
-        onPress={() => void handleImOk()}
-        style={styles.okButton}
-      >
-        <ThemedText type="link" style={styles.okButtonText}>
-          YES - I&apos;m OK
+        <Card variant="glass" padding="lg" style={styles.timerCard}>
+          <CountdownTimer secondsLeft={secondsLeft} />
+        </Card>
+
+        <View style={styles.actions}>
+          <Button
+            title="YES - I’m OK"
+            variant="success"
+            size="lg"
+            fullWidth
+            onPress={() => void handleImOk()}
+          />
+          <Button
+            title={isEscalating ? "Triggering SOS..." : "NO - Send Emergency SOS"}
+            variant="danger"
+            size="lg"
+            fullWidth
+            onPress={() => void handleEscalate()}
+            disabled={isEscalating}
+            loading={isEscalating}
+          />
+        </View>
+
+        <Card variant="outlined" padding="md">
+          <ThemedText
+            type="caption"
+            style={[
+              styles.timeoutWarning,
+              { color: secondsLeft <= 10 ? dangerColor : warningColor },
+            ]}
+          >
+            If no response in {secondsLeft}s, emergency contacts will be notified.
+          </ThemedText>
+        </Card>
+
+        <ThemedText type="caption" style={[styles.helperText, { color: successColor }]}>
+          Tap “YES - I’m OK” to immediately cancel escalation.
         </ThemedText>
-      </TouchableOpacity>
-
-      <TouchableOpacity
-        onPress={() => void handleEscalate()}
-        style={styles.emergencyButton}
-        disabled={isEscalating}
-      >
-        <ThemedText type="link" style={styles.emergencyButtonText}>
-          {isEscalating ? "Triggering SOS..." : "NO - Send Emergency SOS"}
-        </ThemedText>
-      </TouchableOpacity>
-
-      <ThemedText style={styles.timeoutWarning}>
-        If no response in {secondsLeft}s, emergency contacts will be notified
-      </ThemedText>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -195,49 +247,49 @@ export default function ConfirmScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    justifyContent: "center",
-    gap: 10,
+  },
+  scrollView: {
+    flex: 1,
+  },
+  content: {
+    paddingHorizontal: Spacing.xl,
+    gap: Spacing.lg,
+  },
+  header: {
+    gap: Spacing.sm,
+  },
+  title: {
+    lineHeight: 42,
+  },
+  subtitle: {
+    lineHeight: 20,
+    maxWidth: 320,
   },
   mlInfoContainer: {
-    backgroundColor: "rgba(33, 150, 243, 0.1)",
-    borderRadius: 8,
-    padding: 12,
-    marginVertical: 8,
+    gap: Spacing.sm,
   },
-  mlInfo: {
-    fontSize: 12,
-    opacity: 0.8,
-    lineHeight: 18,
+  cardTitle: {
+    marginBottom: Spacing.xs,
   },
-  okButton: {
-    marginTop: 16,
-    backgroundColor: "#4CAF50",
-    borderRadius: 8,
-    padding: 16,
+  mlRow: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    gap: Spacing.sm,
   },
-  okButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 18,
-  },
-  emergencyButton: {
-    marginTop: 8,
-    backgroundColor: "#F44336",
-    borderRadius: 8,
-    padding: 16,
+  timerCard: {
     alignItems: "center",
+    borderRadius: BorderRadius.xl,
   },
-  emergencyButtonText: {
-    color: "#FFFFFF",
-    fontWeight: "bold",
-    fontSize: 16,
+  actions: {
+    gap: Spacing.md,
   },
   timeoutWarning: {
-    fontSize: 11,
-    opacity: 0.6,
     textAlign: "center",
-    marginTop: 12,
+    lineHeight: 20,
+  },
+  helperText: {
+    textAlign: "center",
+    opacity: 0.9,
   },
 });
