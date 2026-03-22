@@ -4,6 +4,9 @@ import type {
 } from "@/src/services/sensors/sensor-adapter";
 import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
 
+const MOCK_SAMPLE_RATE_HZ = 20;
+const MOCK_UPDATE_INTERVAL_MS = 1000 / MOCK_SAMPLE_RATE_HZ;
+
 // Fall simulation phases
 type FallPhase = "normal" | "freefall" | "impact" | "recovery";
 
@@ -45,7 +48,10 @@ export class MockSensorAdapter implements SensorAdapter {
   /**
    * Generate sensor data based on current fall phase
    */
-  private generateFallData(): { accelerometer: { x: number; y: number; z: number }; gyroscope: { x: number; y: number; z: number } } {
+  private generateFallData(): {
+    accelerometer: { x: number; y: number; z: number };
+    gyroscope: { x: number; y: number; z: number };
+  } {
     switch (this.fallPhase) {
       case "freefall":
         // Free fall: near-zero acceleration (< 0.5g = ~4.9 m/s²)
@@ -129,6 +135,8 @@ export class MockSensorAdapter implements SensorAdapter {
     this.stop();
     this.sampleCounter = 0;
 
+    sensorWindowStore.setSampleRateHz(MOCK_SAMPLE_RATE_HZ);
+
     // Faster sampling rate: 50ms (20 Hz) for realistic fall detection
     this.intervalId = setInterval(() => {
       this.sampleCounter++;
@@ -180,9 +188,17 @@ export class MockSensorAdapter implements SensorAdapter {
       const gyroMagnitude = Math.sqrt(
         gyroscope.x ** 2 + gyroscope.y ** 2 + gyroscope.z ** 2,
       );
-      const impactIntensity = this.clamp(Math.abs(accelMagnitude - 9.81) / 12, 0, 1);
+      const impactIntensity = this.clamp(
+        Math.abs(accelMagnitude - 9.81) / 12,
+        0,
+        1,
+      );
       const rotationIntensity = this.clamp(gyroMagnitude / 6, 0, 1);
-      const motionScore = this.clamp(1 - (impactIntensity * 0.65 + rotationIntensity * 0.35), 0, 1);
+      const motionScore = this.clamp(
+        1 - (impactIntensity * 0.65 + rotationIntensity * 0.35),
+        0,
+        1,
+      );
 
       const sample: SensorSample = {
         timestampMs: Date.now(),
@@ -193,7 +209,7 @@ export class MockSensorAdapter implements SensorAdapter {
         motionScore,
         orientationChange: this.fallSimulationActive || gyroMagnitude > 0.8,
         motionState: this.fallSimulationActive ? "unstable" : "stationary",
-        sampleRateHz: 20,
+        sampleRateHz: MOCK_SAMPLE_RATE_HZ,
         source: "mock",
       };
 
@@ -209,10 +225,12 @@ export class MockSensorAdapter implements SensorAdapter {
 
       this.pushSample(sample);
       onSample(sample);
-    }, 50); // 50ms = 20 Hz sampling
+    }, MOCK_UPDATE_INTERVAL_MS); // 50ms = 20 Hz sampling
   }
 
   stop(): void {
+    sensorWindowStore.resetSampleRateHz();
+
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;

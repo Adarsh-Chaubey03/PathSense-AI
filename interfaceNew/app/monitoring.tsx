@@ -105,7 +105,9 @@ export default function MonitoringScreen() {
 
       // Only navigate to confirmation for REAL_FALL
       if (result === "REAL_FALL") {
-        appendMonitoringLog("Backend confirmed REAL_FALL -> opening Are you OK page");
+        appendMonitoringLog(
+          "Backend confirmed REAL_FALL -> opening Are you OK page",
+        );
         routeToConfirmation(reason);
       } else {
         // For FALSE_ALARM or NO_FALL, reset and continue monitoring
@@ -124,7 +126,9 @@ export default function MonitoringScreen() {
     async (reason: string): Promise<void> => {
       // Prevent concurrent processing
       if (isProcessingRef.current) {
-        appendMonitoringLog("ML API call skipped: previous request still in progress");
+        appendMonitoringLog(
+          "ML API call skipped: previous request still in progress",
+        );
         return;
       }
       isProcessingRef.current = true;
@@ -170,7 +174,9 @@ export default function MonitoringScreen() {
 
         if (!response) {
           setApiStatus("ML API failed - treating as potential fall");
-          appendMonitoringLog("ML API call failed; fallback REAL_FALL flow applied");
+          appendMonitoringLog(
+            "ML API call failed; fallback REAL_FALL flow applied",
+          );
           // On API failure, default to showing confirmation (safety first)
           storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, sampleCount, reason);
           return;
@@ -194,7 +200,9 @@ export default function MonitoringScreen() {
         );
       } catch {
         setApiStatus("Error processing fall detection");
-        appendMonitoringLog("ML API error during processing; fallback REAL_FALL flow applied");
+        appendMonitoringLog(
+          "ML API error during processing; fallback REAL_FALL flow applied",
+        );
         // On error, default to showing confirmation (safety first)
         storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, 0, reason);
       } finally {
@@ -229,7 +237,9 @@ export default function MonitoringScreen() {
 
       // Edge-filter responsibility: when spike detected, extract buffer and call ML API
       if (decision.shouldEscalateCandidate) {
-        appendMonitoringLog(`Edge filter CALL_API triggered: ${decision.reason}`);
+        appendMonitoringLog(
+          `Edge filter CALL_API triggered: ${decision.reason}`,
+        );
         void processMLDetection("Edge filter detected a potential fall");
       }
     },
@@ -287,7 +297,7 @@ export default function MonitoringScreen() {
       result: "REAL_FALL",
       fallProbability: 0.85,
       falseProbability: 0.15,
-      sampleCount: sensorWindowStore.getSampleCount(),
+      sampleCount: sensorWindowStore.getTargetWindowSize(),
       triggeredAt: new Date().toISOString(),
     });
 
@@ -308,8 +318,8 @@ export default function MonitoringScreen() {
           : "waiting..."}
       </ThemedText>
       <ThemedText style={styles.bufferStatus}>
-        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()}/
-        {sensorWindowStore.getTargetWindowSize()} samples)
+        Buffer: {bufferFill}% ({sensorWindowStore.getSampleCount()} raw →{" "}
+        {sensorWindowStore.getTargetWindowSize()} model samples)
       </ThemedText>
       <ThemedText style={styles.edgeStatus}>
         Edge filter:{" "}
@@ -330,7 +340,10 @@ export default function MonitoringScreen() {
       )}
       <ThemedText style={styles.logsTitle}>Monitoring logs</ThemedText>
       {monitoringLogs.length > 0 ? (
-        <ScrollView style={styles.logsContainer} contentContainerStyle={styles.logsContentContainer}>
+        <ScrollView
+          style={styles.logsContainer}
+          contentContainerStyle={styles.logsContentContainer}
+        >
           {monitoringLogs
             .slice()
             .reverse()

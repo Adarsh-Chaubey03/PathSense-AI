@@ -1,12 +1,59 @@
 import { Platform } from "react-native";
+import Constants from "expo-constants";
 
 const DEFAULT_PORT = "4000";
 const REQUEST_TIMEOUT_MS = 15000;
+
+function extractHostFromUrl(rawUrl: string): string | null {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+function getExpoDevHost(): string | null {
+  const fromHostUri = Constants.expoConfig?.hostUri;
+  if (typeof fromHostUri === "string" && fromHostUri.length > 0) {
+    return fromHostUri.split(":")[0] ?? null;
+  }
+
+  const fromDebugUrl = (
+    Constants as { expoGoConfig?: { debuggerHost?: string } }
+  ).expoGoConfig?.debuggerHost;
+  if (typeof fromDebugUrl === "string" && fromDebugUrl.length > 0) {
+    return fromDebugUrl.split(":")[0] ?? null;
+  }
+
+  const fromUri =
+    (Constants as { linkingUri?: string | null }).linkingUri ?? null;
+  if (typeof fromUri === "string" && fromUri.length > 0) {
+    return extractHostFromUrl(fromUri);
+  }
+
+  return null;
+}
 
 function resolveBaseUrl(): string {
   const configured = process.env.EXPO_PUBLIC_API_BASE_URL;
   if (configured && configured.trim().length > 0) {
     return configured.replace(/\/+$/, "");
+  }
+
+  const configuredHost = process.env.EXPO_PUBLIC_API_HOST;
+  if (configuredHost && configuredHost.trim().length > 0) {
+    const configuredPort = process.env.EXPO_PUBLIC_API_PORT ?? DEFAULT_PORT;
+    return `http://${configuredHost.trim()}:${configuredPort.trim()}/api`;
+  }
+
+  const expoDevHost = getExpoDevHost();
+  if (
+    expoDevHost &&
+    expoDevHost !== "localhost" &&
+    expoDevHost !== "127.0.0.1"
+  ) {
+    return `http://${expoDevHost}:${DEFAULT_PORT}/api`;
   }
 
   const host = Platform.OS === "android" ? "10.0.2.2" : "localhost";

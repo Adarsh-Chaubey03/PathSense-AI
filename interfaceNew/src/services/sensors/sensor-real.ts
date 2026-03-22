@@ -15,18 +15,22 @@ import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
 
 const DEFAULT_SAMPLE_RATE_HZ = 50;
 const GRAVITY_EARTH = 9.81;
+const SENSOR_WINDOW_DURATION_MS = 2000;
 
 export class RealSensorAdapter implements SensorAdapter {
   private accelerometerSubscription: ReturnType<
     typeof Accelerometer.addListener
   > | null = null;
-  private gyroscopeSubscription: ReturnType<typeof Gyroscope.addListener> | null =
-    null;
+  private gyroscopeSubscription: ReturnType<
+    typeof Gyroscope.addListener
+  > | null = null;
   private latestAccel: SensorVector | null = null;
   private latestGyro: SensorVector | null = null;
   private latestSample: SensorSample | null = null;
   private readonly samples: SensorSample[] = [];
   private readonly maxBufferSize = 500;
+
+  private sampleTimestampsMs: number[] = [];
 
   private clamp(value: number, min: number, max: number): number {
     return Math.max(min, Math.min(max, value));
@@ -61,7 +65,9 @@ export class RealSensorAdapter implements SensorAdapter {
     }
 
     const accelMagnitude = Math.sqrt(
-      this.latestAccel.x ** 2 + this.latestAccel.y ** 2 + this.latestAccel.z ** 2,
+      this.latestAccel.x ** 2 +
+        this.latestAccel.y ** 2 +
+        this.latestAccel.z ** 2,
     );
     const gyroMagnitude = Math.sqrt(
       this.latestGyro.x ** 2 + this.latestGyro.y ** 2 + this.latestGyro.z ** 2,
@@ -83,8 +89,28 @@ export class RealSensorAdapter implements SensorAdapter {
     const orientationChange =
       gyroMagnitude > 0.8 || Math.abs(accelMagnitude - GRAVITY_EARTH) > 3.5;
 
+    const now = Date.now();
+    const cutoff = now - SENSOR_WINDOW_DURATION_MS;
+    this.sampleTimestampsMs.push(now);
+    this.sampleTimestampsMs = this.sampleTimestampsMs.filter(
+      (timestamp) => timestamp >= cutoff,
+    );
+
+    const actualSampleRateHz =
+      this.sampleTimestampsMs.length > 1
+        ? Math.max(
+            1,
+            Math.round(
+              (this.sampleTimestampsMs.length - 1) /
+                ((this.sampleTimestampsMs[this.sampleTimestampsMs.length - 1] -
+                  this.sampleTimestampsMs[0]) /
+                  1000),
+            ),
+          )
+        : DEFAULT_SAMPLE_RATE_HZ;
+
     return {
-      timestampMs: Date.now(),
+      timestampMs: now,
       accelerometer: this.latestAccel,
       gyroscope: this.latestGyro,
       accelMagnitude,
@@ -92,7 +118,7 @@ export class RealSensorAdapter implements SensorAdapter {
       motionScore,
       orientationChange,
       motionState,
-      sampleRateHz: DEFAULT_SAMPLE_RATE_HZ,
+      sampleRateHz: actualSampleRateHz,
       source: "real",
     };
   }
@@ -131,6 +157,7 @@ export class RealSensorAdapter implements SensorAdapter {
       sample.gyroscope.z,
     );
 
+    sensorWindowStore.setSampleRateHz(sample.sampleRateHz);
     this.pushSample(sample);
     onSample(sample);
   };
@@ -161,6 +188,8 @@ export class RealSensorAdapter implements SensorAdapter {
     this.gyroscopeSubscription?.remove();
     this.accelerometerSubscription = null;
     this.gyroscopeSubscription = null;
+    this.sampleTimestampsMs = [];
+    sensorWindowStore.resetSampleRateHz();
   }
 
   getLatestSample(): SensorSample | null {
