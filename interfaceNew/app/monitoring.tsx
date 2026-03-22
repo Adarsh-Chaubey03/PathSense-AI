@@ -10,6 +10,7 @@ import { services } from "@/src/services";
 import { sensorWindowStore } from "@/src/services/sensors/sensor-window-store";
 import {
   postFallDetectWithRetry,
+  getHealth,
   type FallDetectResult,
 } from "@/src/services/api/fall-events";
 import { getApiBaseUrl } from "@/src/services/api/client";
@@ -28,6 +29,21 @@ import {
 } from "@/src/features/fall-event/detection";
 
 const EDGE_THRESHOLDS = getEdgeFilterThresholds();
+
+function isValidFallResult(result: unknown): result is FallDetectResult {
+  return (
+    result === "REAL_FALL" || result === "FALSE_ALARM" || result === "NO_FALL"
+  );
+}
+
+function isValidProbability(value: unknown): value is number {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 1
+  );
+}
 
 export default function MonitoringScreen() {
   const router = useRouter();
@@ -175,17 +191,30 @@ export default function MonitoringScreen() {
         });
 
         if (!response) {
-          setApiStatus("ML API failed - treating as potential fall");
+          setApiStatus("ML API unavailable - continuing monitoring");
           appendMonitoringLog(
-            "ML API call failed; fallback REAL_FALL flow applied",
+            "ML API call failed after retries; suppressing escalation and continuing monitoring",
           );
-          // On API failure, default to showing confirmation (safety first)
-          storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, sampleCount, reason);
+          storeMLResultAndNavigate("NO_FALL", 0, 0, sampleCount, reason);
           return;
         }
 
         // 3. Store ML result and handle based on response
         const { result, fall_prob, false_prob } = response;
+
+        if (
+          !isValidFallResult(result) ||
+          !isValidProbability(fall_prob) ||
+          !isValidProbability(false_prob)
+        ) {
+          setApiStatus("Invalid ML API response - continuing monitoring");
+          appendMonitoringLog(
+            "ML API returned invalid payload; suppressing escalation and continuing monitoring",
+          );
+          storeMLResultAndNavigate("NO_FALL", 0, 0, sampleCount, reason);
+          return;
+        }
+
         setApiStatus(
           `ML result: ${result} (fall: ${(fall_prob * 100).toFixed(1)}%)`,
         );
@@ -201,12 +230,11 @@ export default function MonitoringScreen() {
           reason,
         );
       } catch {
-        setApiStatus("Error processing fall detection");
+        setApiStatus("Error reaching ML API - continuing monitoring");
         appendMonitoringLog(
-          "ML API error during processing; fallback REAL_FALL flow applied",
+          "ML API error during processing; suppressing escalation and continuing monitoring",
         );
-        // On error, default to showing confirmation (safety first)
-        storeMLResultAndNavigate("REAL_FALL", 0.5, 0.5, 0, reason);
+        storeMLResultAndNavigate("NO_FALL", 0, 0, 0, reason);
       } finally {
         isProcessingRef.current = false;
       }
@@ -255,6 +283,19 @@ export default function MonitoringScreen() {
     inTriggerRangeRef.current = false;
     setMonitoringLogs([]);
     appendMonitoringLog(`API base resolved to ${apiBaseUrl}`);
+
+    void (async () => {
+      try {
+        const health = await getHealth();
+        appendMonitoringLog(
+          `Backend health check OK: ${health.status} @ ${health.timestamp}`,
+        );
+      } catch {
+        appendMonitoringLog(
+          "Backend health check FAILED: verify API base URL/device network/server status",
+        );
+      }
+    })();
 
     // Start sensor monitoring
     services.sensorAdapter.start(handleSensorSample);

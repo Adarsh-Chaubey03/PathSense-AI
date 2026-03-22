@@ -56,6 +56,7 @@ export interface FallDetectResponse {
   fall_prob: number;
   false_prob: number;
   result: FallDetectResult;
+  decision_reason?: string;
 }
 
 export interface FallDetectRequest {
