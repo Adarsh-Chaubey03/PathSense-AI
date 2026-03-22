@@ -37,10 +37,12 @@ export default function ConfirmScreen() {
   const [mlData, setMlData] = useState<MLDetectionData | undefined>(undefined);
   const vibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const safeConfirmedRef = useRef(false);
+  const timeoutElapsedRef = useRef(false);
 
   const successColor = useThemeColor({}, "success");
   const dangerColor = useThemeColor({}, "danger");
   const warningColor = useThemeColor({}, "warning");
+  const canConfirmByTouch = !safeConfirmedRef.current && !isEscalating && secondsLeft > 0;
 
   useEffect(() => {
     // Get ML detection result from store
@@ -130,7 +132,7 @@ export default function ConfirmScreen() {
   };
 
   const handleImOk = useCallback(async (): Promise<void> => {
-    if (safeConfirmedRef.current) {
+    if (safeConfirmedRef.current || timeoutElapsedRef.current || secondsLeft <= 0) {
       return;
     }
 
@@ -139,6 +141,8 @@ export default function ConfirmScreen() {
     if (getFallEvent().state === "CONFIRMING") {
       transitionFallEvent("FALSE_ALARM", "User confirmed safety");
     }
+
+    transitionFallEvent("MONITORING", "User confirmed safety and resumed monitoring");
 
     setSecondsLeft(0);
 
@@ -149,8 +153,8 @@ export default function ConfirmScreen() {
     // Clear ML detection data
     clearMLDetectionResult();
 
-    router.push("./result");
-  }, [mlData?.safeSignalKey, router]);
+    router.replace("/monitoring");
+  }, [mlData?.safeSignalKey, router, secondsLeft]);
 
   const handleEscalate = useCallback(async (): Promise<void> => {
     if (isEscalating || safeConfirmedRef.current) {
@@ -176,6 +180,7 @@ export default function ConfirmScreen() {
     }
 
     if (secondsLeft <= 0) {
+      timeoutElapsedRef.current = true;
       void handleEscalate();
       return;
     }
@@ -188,7 +193,14 @@ export default function ConfirmScreen() {
   }, [handleEscalate, secondsLeft]);
 
   return (
-    <ThemedView style={styles.container}>
+    <ThemedView
+      style={styles.container}
+      onTouchStart={() => {
+        if (canConfirmByTouch && !timeoutElapsedRef.current) {
+          void handleImOk();
+        }
+      }}
+    >
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={[
@@ -281,7 +293,7 @@ export default function ConfirmScreen() {
           type="caption"
           style={[styles.helperText, { color: successColor }]}
         >
-          Tap “YES - I’m OK” to immediately cancel escalation.
+          Accessibility mode: tap anywhere on this screen to confirm you are safe.
         </ThemedText>
       </ScrollView>
     </ThemedView>
