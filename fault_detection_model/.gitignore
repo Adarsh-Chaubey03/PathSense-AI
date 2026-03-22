@@ -4,7 +4,6 @@ __pycache__/
 *.pyc
 artifacts/
 checkpoints/
-data/
 runs/
 /sisFall_dataset/
 *.csv
