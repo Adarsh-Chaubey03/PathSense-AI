@@ -163,7 +163,7 @@ export default function AlertScreen() {
           <ThemedText type="label" style={styles.sectionLabel}>
             Tactical Feed
           </ThemedText>
-          <View style={[styles.infoRow, { borderBottomColor: borderColor }]}> 
+          <View style={[styles.infoRow, { borderBottomColor: borderColor }]}>
             <ThemedText type="caption">GPS</ThemedText>
             <ThemedText type="defaultSemiBold" style={styles.infoValue}>
               {isDispatching
@@ -206,10 +206,13 @@ export default function AlertScreen() {
           padding="md"
           style={[styles.noticeCard, { backgroundColor: cardAlt }]}
         >
-          <ThemedText type="caption" style={[styles.infoText, { color: textSecondary }]}>
-          {hasDispatched
-            ? "Emergency sequence complete. Contacts have been notified."
-            : "Send the alert to notify all configured emergency contacts."}
+          <ThemedText
+            type="caption"
+            style={[styles.infoText, { color: textSecondary }]}
+          >
+            {hasDispatched
+              ? "Emergency sequence complete. Contacts have been notified."
+              : "Send the alert to notify all configured emergency contacts."}
           </ThemedText>
         </Card>
       </ScrollView>

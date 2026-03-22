@@ -87,13 +87,13 @@ export default function ResultScreen() {
           <ThemedText type="label" style={styles.cardLabel}>
             Event Ledger
           </ThemedText>
-          <View style={[styles.summaryRow, { borderBottomColor: borderColor }]}> 
+          <View style={[styles.summaryRow, { borderBottomColor: borderColor }]}>
             <ThemedText type="caption">Status</ThemedText>
             <ThemedText type="defaultSemiBold">
               {isFalseAlarm ? "Dismissed" : "Resolved"}
             </ThemedText>
           </View>
-          <View style={[styles.summaryRow, { borderBottomColor: borderColor }]}> 
+          <View style={[styles.summaryRow, { borderBottomColor: borderColor }]}>
             <ThemedText type="caption">Transitions Logged</ThemedText>
             <ThemedText type="defaultSemiBold">{transitions.length}</ThemedText>
           </View>
@@ -110,7 +110,7 @@ export default function ResultScreen() {
           <ThemedText type="label" style={styles.cardLabel}>
             Timeline Extract
           </ThemedText>
-          <View style={[styles.logContainer, { borderColor }]}> 
+          <View style={[styles.logContainer, { borderColor }]}>
             {transitions
               .slice(-5)
               .reverse()
@@ -120,7 +120,7 @@ export default function ResultScreen() {
                   type="caption"
                   style={styles.logItem}
                 >
-                  {t.to} // {t.reason}
+                  {t.to} • {t.reason}
                 </ThemedText>
               ))}
           </View>
