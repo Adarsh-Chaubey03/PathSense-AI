@@ -27,6 +27,10 @@ import {
   resetEdgeFilter,
   type DetectionDecision,
 } from "@/src/features/fall-event/detection";
+import {
+  buildSafeSignalKeyFromSample,
+  isSafeSignalKeyCached,
+} from "@/src/services/storage/safe-fall-cache";
 
 const EDGE_THRESHOLDS = getEdgeFilterThresholds();
 
@@ -111,6 +115,7 @@ export default function MonitoringScreen() {
       falseProb: number,
       sampleCount: number,
       reason: string,
+      safeSignalKey?: string,
     ): void => {
       // Store the ML detection result
       setMLDetectionResult({
@@ -119,6 +124,7 @@ export default function MonitoringScreen() {
         falseProbability: falseProb,
         sampleCount,
         triggeredAt: new Date().toISOString(),
+        safeSignalKey,
       });
 
       // Only navigate to confirmation for REAL_FALL
@@ -141,7 +147,7 @@ export default function MonitoringScreen() {
 
   // processMLDetection depends on storeMLResultAndNavigate
   const processMLDetection = useCallback(
-    async (reason: string): Promise<void> => {
+    async (reason: string, triggerSample: SensorSample): Promise<void> => {
       // Prevent concurrent processing
       if (isProcessingRef.current) {
         appendMonitoringLog(
@@ -170,6 +176,27 @@ export default function MonitoringScreen() {
           return;
         }
 
+        const safeSignalKey = buildSafeSignalKeyFromSample(triggerSample);
+        const shouldSuppressApiCall =
+          await isSafeSignalKeyCached(safeSignalKey);
+        if (shouldSuppressApiCall) {
+          setApiStatus(
+            "Safe cache matched - skipping ML API and continuing monitoring",
+          );
+          appendMonitoringLog(
+            `Safe cache hit for signal ${safeSignalKey}; suppressing /fall-detect call`,
+          );
+          storeMLResultAndNavigate(
+            "NO_FALL",
+            0,
+            0,
+            sampleCount,
+            reason,
+            safeSignalKey,
+          );
+          return;
+        }
+
         setApiStatus(`Sending ${sampleCount} samples to ML API...`);
         appendMonitoringLog(
           `Trigger API call: window=${sampleCount}x6, duration=${windowPayload.windowEndMs - windowPayload.windowStartMs}ms`,
@@ -195,7 +222,14 @@ export default function MonitoringScreen() {
           appendMonitoringLog(
             "ML API call failed after retries; suppressing escalation and continuing monitoring",
           );
-          storeMLResultAndNavigate("NO_FALL", 0, 0, sampleCount, reason);
+          storeMLResultAndNavigate(
+            "NO_FALL",
+            0,
+            0,
+            sampleCount,
+            reason,
+            safeSignalKey,
+          );
           return;
         }
 
@@ -211,7 +245,14 @@ export default function MonitoringScreen() {
           appendMonitoringLog(
             "ML API returned invalid payload; suppressing escalation and continuing monitoring",
           );
-          storeMLResultAndNavigate("NO_FALL", 0, 0, sampleCount, reason);
+          storeMLResultAndNavigate(
+            "NO_FALL",
+            0,
+            0,
+            sampleCount,
+            reason,
+            safeSignalKey,
+          );
           return;
         }
 
@@ -228,6 +269,7 @@ export default function MonitoringScreen() {
           false_prob,
           sampleCount,
           reason,
+          safeSignalKey,
         );
       } catch {
         setApiStatus("Error reaching ML API - continuing monitoring");
@@ -270,7 +312,10 @@ export default function MonitoringScreen() {
         appendMonitoringLog(
           `Edge filter CALL_API triggered: ${decision.reason}`,
         );
-        void processMLDetection("Edge filter detected a potential fall");
+        void processMLDetection(
+          "Edge filter detected a potential fall",
+          newSample,
+        );
       }
     },
     [appendMonitoringLog, processMLDetection],

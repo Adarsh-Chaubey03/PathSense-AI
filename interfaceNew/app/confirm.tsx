@@ -9,6 +9,7 @@ import { CountdownTimer } from "@/src/components/common/CountdownTimer";
 import { StatusBadge } from "@/src/components/common/StatusBadge";
 import { playConfirmationPromptHaptic } from "@/src/services/feedback/haptics";
 import { speakConfirmationPrompt } from "@/src/services/feedback/voice";
+import { cacheSafeSignalKey } from "@/src/services/storage/safe-fall-cache";
 import {
   getFallEvent,
   resetFallEvent,
@@ -82,7 +83,11 @@ export default function ConfirmScreen() {
     }
   };
 
-  const handleImOk = (): void => {
+  const handleImOk = useCallback(async (): Promise<void> => {
+    if (mlData?.safeSignalKey) {
+      await cacheSafeSignalKey(mlData.safeSignalKey);
+    }
+
     if (getFallEvent().state === "CONFIRMING") {
       transitionFallEvent("FALSE_ALARM", "User confirmed safety");
     }
@@ -91,7 +96,7 @@ export default function ConfirmScreen() {
     clearMLDetectionResult();
 
     router.push("./result");
-  };
+  }, [mlData?.safeSignalKey, router]);
 
   const handleEscalate = useCallback(async (): Promise<void> => {
     if (isEscalating) {
@@ -148,7 +153,10 @@ export default function ConfirmScreen() {
 
       <StatusBadge state={event.state} />
 
-      <TouchableOpacity onPress={handleImOk} style={styles.okButton}>
+      <TouchableOpacity
+        onPress={() => void handleImOk()}
+        style={styles.okButton}
+      >
         <ThemedText type="link" style={styles.okButtonText}>
           YES - I&apos;m OK
         </ThemedText>

@@ -4,40 +4,43 @@ import type {
   FallEventRequest,
   FallEventResponse,
   ValidationResult,
-} from '../types/fall.ts';
-import { send_alert_to_contacts } from './contactManager.ts';
-import { appendFallEvent } from './fallEventStore.ts';
+} from "../types/fall.ts";
+import { send_alert_to_contacts } from "./contactManager.ts";
+import { appendFallEvent } from "./fallEventStore.ts";
 
 const CONFIRMATION_TIMEOUT_MS = 5000;
 
 const POSITIVE_RESPONSES = [
-  'yes',
-  'yeah',
-  'yep',
-  'i am fine',
+  "yes",
+  "yeah",
+  "yep",
+  "i am fine",
   "i'm fine",
-  'i am okay',
+  "i am okay",
   "i'm okay",
-  'all good',
-  'no problem',
-  'fine',
-  'okay',
-  'ok',
+  "all good",
+  "no problem",
+  "fine",
+  "okay",
+  "ok",
 ];
 
 /**
  * Validates a fall event based on motion score and orientation change.
  */
-export function validateFall(motionScore: number, orientationChange: boolean): ValidationResult {
+export function validateFall(
+  motionScore: number,
+  orientationChange: boolean,
+): ValidationResult {
   if (motionScore < 0.05 && orientationChange) {
-    return { status: 'CONFIRMED' };
+    return { status: "CONFIRMED" };
   }
 
   if (motionScore > 0.2) {
-    return { status: 'REJECTED' };
+    return { status: "REJECTED" };
   }
 
-  return { status: 'UNCERTAIN' };
+  return { status: "UNCERTAIN" };
 }
 
 function isUserOkay(transcript: string | undefined): boolean {
@@ -48,15 +51,32 @@ function isUserOkay(transcript: string | undefined): boolean {
   const normalizedTranscript = transcript.toLowerCase().trim();
 
   // Check for negation patterns that override positive responses
-  const negationPatterns = [/\bnot\s+okay\b/, /\bnot\s+fine\b/, /\bnot\s+ok\b/, /n't\s+okay\b/, /n't\s+fine\b/, /n't\s+ok\b/, /\bhelp\b/, /\bneed\s+help\b/, /\bhurt\b/, /\bpain\b/, /\bfell\b/, /\bfallen\b/];
+  const negationPatterns = [
+    /\bnot\s+okay\b/,
+    /\bnot\s+fine\b/,
+    /\bnot\s+ok\b/,
+    /n't\s+okay\b/,
+    /n't\s+fine\b/,
+    /n't\s+ok\b/,
+    /\bhelp\b/,
+    /\bneed\s+help\b/,
+    /\bhurt\b/,
+    /\bpain\b/,
+    /\bfell\b/,
+    /\bfallen\b/,
+  ];
   if (negationPatterns.some((pattern) => pattern.test(normalizedTranscript))) {
     return false;
   }
 
-  return POSITIVE_RESPONSES.some((response) => normalizedTranscript.includes(response));
+  return POSITIVE_RESPONSES.some((response) =>
+    normalizedTranscript.includes(response),
+  );
 }
 
-async function waitForUserConfirmation(transcript?: string): Promise<string | undefined> {
+async function waitForUserConfirmation(
+  transcript?: string,
+): Promise<string | undefined> {
   if (transcript !== undefined) {
     return transcript;
   }
@@ -69,11 +89,14 @@ async function waitForUserConfirmation(transcript?: string): Promise<string | un
 }
 
 async function triggerSOS(): Promise<FallDispatchSummary> {
-  const message = 'EMERGENCY ALERT: Possible fall detected. Immediate assistance required.';
+  const message =
+    "EMERGENCY ALERT: Possible fall detected. Immediate assistance required.";
   const alertResults = await send_alert_to_contacts(message);
 
   const recipientsTotal = alertResults.length;
-  const recipientsSucceeded = alertResults.filter((result) => result.smsResult.success).length;
+  const recipientsSucceeded = alertResults.filter(
+    (result) => result.smsResult.success,
+  ).length;
 
   return {
     attempted: recipientsTotal > 0,
@@ -86,7 +109,9 @@ async function triggerSOS(): Promise<FallDispatchSummary> {
 /**
  * Handles the complete fall event workflow.
  */
-export async function handleFallEvent(request: FallEventRequest): Promise<FallEventResponse> {
+export async function handleFallEvent(
+  request: FallEventRequest,
+): Promise<FallEventResponse> {
   const { motionScore, orientationChange, transcript } = request;
 
   const validationResult = validateFall(motionScore, orientationChange);
@@ -99,25 +124,32 @@ export async function handleFallEvent(request: FallEventRequest): Promise<FallEv
     recipientsSucceeded: 0,
   };
 
-  console.log('[FallEvent] Validation result:', validationResult.status);
+  console.log("[FallEvent] Validation result:", validationResult.status);
 
-  if (finalStatus === 'UNCERTAIN') {
+  if (isUserOkay(transcript)) {
+    finalStatus = "REJECTED";
+    console.log(
+      "[FallEvent] Decision: Explicit user-safe confirmation, canceling SOS",
+    );
+  }
+
+  if (finalStatus === "UNCERTAIN") {
     const userResponse = await waitForUserConfirmation(transcript);
-    console.log('[FallEvent] Transcript received:', userResponse || '(empty)');
+    console.log("[FallEvent] Transcript received:", userResponse || "(empty)");
 
     if (isUserOkay(userResponse)) {
-      finalStatus = 'REJECTED';
-      console.log('[FallEvent] Decision: User is okay, canceling SOS');
+      finalStatus = "REJECTED";
+      console.log("[FallEvent] Decision: User is okay, canceling SOS");
     } else {
-      finalStatus = 'CONFIRMED';
-      console.log('[FallEvent] Decision: User needs help, triggering SOS');
+      finalStatus = "CONFIRMED";
+      console.log("[FallEvent] Decision: User needs help, triggering SOS");
     }
   }
 
-  if (finalStatus === 'CONFIRMED') {
+  if (finalStatus === "CONFIRMED") {
     dispatch = await triggerSOS();
     sosTriggered = dispatch.success;
-    console.log(`[FallEvent] SOS ${sosTriggered ? 'triggered' : 'failed'}`);
+    console.log(`[FallEvent] SOS ${sosTriggered ? "triggered" : "failed"}`);
   }
 
   appendFallEvent({
