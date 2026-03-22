@@ -120,7 +120,7 @@ export default function ResultScreen() {
                   type="caption"
                   style={styles.logItem}
                 >
-                  {t.to} // {t.reason}
+                  {t.to} • {t.reason}
                 </ThemedText>
               ))}
           </View>
