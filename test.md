@@ -1,38 +1,42 @@
 # Hackathon Technical Disclosure & Compliance Document
 
 ## Team Information
-- **Team Name**:
-- **Project Title**:
-- **Problem Statement / Track**:
-- **Team Members**:
-- **Repository Link (if public)**:
-- **Deployment Link (if applicable)**:
+
+- **Team Name**: Ved Vahini
+- **Project Title**: Visually impaired individuals face a heightened risk of falls due to limited environmental awareness. There is a need for an intelligent, smartphone-based fall detection system that leverages built in IMU sensors. Create a solution in this regard.
+
+- **Problem Statement / Track**: 5
+- **Team Members**: Adarsh Chaubey, Sakshi Gupta, Aditya Laxkar, Abhinav Patra
+- **Repository Link (if public)**: https://github.com/adarshchaubey03/PathSense-AI/
+- **Deployment Link (if applicable)**: It is an Application.
 
 ---
-make a dot in square brackets for selection 
+
+make a dot in square brackets for selection
 
 ## 1. APIs & External Services Used
 
 For **each API / external service**, teams must clearly specify the following:
 
 ### API / Service Entry
+
 - **API / Service Name**:
 - **Provider / Organization**:
 - **Purpose in Project**:
 - **API Type**:
-  - [ ] REST
+  - [x] REST
   - [ ] GraphQL
-  - [ ] SDK
+  - [x] SDK
   - [ ] Other (specify)
 - **License Type**:
-  - [ ] Open Source
+  - [x] Open Source
   - [ ] Free Tier
   - [ ] Academic
   - [ ] Commercial
 - **License Link / Documentation URL**:
 - **Rate Limits (if any)**:
 - **Commercial Use Allowed**:
-  - [ ] Yes
+  - [x] Yes
   - [ ] No
   - [ ] Unclear
 
@@ -47,16 +51,16 @@ Teams **must disclose how API keys or credentials are obtained and handled**.
 - **API Key Source**:
   - [ ] Self-generated from official provider
   - [ ] Hackathon-provided key
-  - [ ] Open / Keyless API
+  - [x] Open / Keyless API
 - **Key Storage Method**:
   - [ ] Environment Variables
   - [ ] Secure Vault
   - [ ] Backend-only (not exposed)
 - **Hardcoded in Repository**:
-  - [ ] Yes 
-  - [ ] No 
+  - [ ] Yes
+  - [ ] No
 
- **Hardcoding API keys in public repositories will lead to disqualification.**
+  **Hardcoding API keys in public repositories will lead to disqualification.**
 
 ---
 
@@ -64,10 +68,9 @@ Teams **must disclose how API keys or credentials are obtained and handled**.
 
 List **all major libraries, frameworks, and SDKs** used.
 
-| Name | Version | Purpose | License |
-|------|---------|---------|---------|
-| Example: React | 18.x | Frontend UI | MIT |
-
+| Name           | Version | Purpose     | License |
+| -------------- | ------- | ----------- | ------- |
+| Example: React | 18.x    | Frontend UI | MIT     |
 
 ---
 
@@ -76,20 +79,22 @@ List **all major libraries, frameworks, and SDKs** used.
 Teams must **explicitly disclose all AI usage**.
 
 ### AI Models
+
 - **Model Name**:
-- **Provider**:
-- **Used For** (e.g., summarization, vision, code generation):
+- **Provider**: self
+- **Used For** : Identifying Potential Fall values
 - **Access Method**:
   - [ ] API
-  - [ ] Local Model
+  - [x] Local Model
   - [ ] Hosted Platform
 
 ### AI Tools / Platforms
+
 - **Tool Name**:
 - **Role in Project**:
 - **Level of Dependency**:
   - [ ] Assistive
-  - [ ] Core Logic
+  - [x] Core Logic
   - [ ] Entire Solution
 
 ---
@@ -99,18 +104,19 @@ Teams must **explicitly disclose all AI usage**.
 The following must be declared clearly:
 
 - **AI Agents Used** (if any):
-  - [ ] None
-  - [ ] Yes (list below)
+  - [] None
+  - [x] Yes
 
 ### If Yes:
+
 - **Agent Name / Platform**:
 - **Capabilities Used**:
   - [ ] Code generation
   - [ ] Full app scaffolding
   - [ ] Decision making
-  - [ ] Autonomous workflows
+  - [x] Autonomous workflows
 - **Human Intervention Level**:
-  - [ ] High (manual design & logic)
+  - [x] High (manual design & logic)
   - [ ] Medium
   - [ ] Low (mostly autonomous)
 
@@ -121,18 +127,22 @@ The following must be declared clearly:
 To preserve **originality, creativity, and fair competition**, the following restrictions apply:
 
 ### Disallowed
+
 - Fully autonomous platforms that:
   - Generate **entire applications end-to-end**
   - Make architectural decisions without human reasoning
   - Auto-generate UI + backend + deployment with minimal input
 
 ### Restricted (Must Be Declared & Justified)
+
 Examples include but are not limited to:
+
 - Emergent-style autonomous app builders
 - Full-stack auto-generation agents
 - Prompt-to-product systems
 
 Usage is allowed **only if**:
+
 - Core logic is human-designed
 - AI is used as an **assistant**, not a replacement
 - Teams can clearly explain architecture & decisions
@@ -144,6 +154,7 @@ Failure to justify usage may impact **innovation and originality scores**.
 ## 7. Originality & Human Contribution Statement
 
 Briefly explain:
+
 - What parts were **designed and implemented by humans**
 - What parts were **assisted by AI**
 - What makes your solution **unique**
@@ -152,11 +163,11 @@ Briefly explain:
 
 ## 8. Ethical, Legal & Compliance Checklist
 
-- [ ] No copyrighted data used without permission
-- [ ] No leaked or private datasets
-- [ ] API usage complies with provider TOS
-- [ ] No malicious automation or scraping
-- [ ] No AI-generated plagiarism
+- [x] No copyrighted data used without permission
+- [x] No leaked or private datasets
+- [x] API usage complies with provider TOS
+- [x] No malicious automation or scraping
+- [x] No AI-generated plagiarism
 
 ---
 
@@ -165,7 +176,6 @@ Briefly explain:
 > We confirm that all information provided above is accurate.  
 > We understand that misrepresentation may lead to disqualification.
 
-**Team Representative Name**:  
-
+**Team Representative Name**:
 
 ---
