@@ -427,7 +427,8 @@ export default function MonitoringScreen() {
             Live Monitoring
           </ThemedText>
           <ThemedText type="caption" style={styles.subtitle}>
-            PathSense continuously analyzes motion and confirms high-risk events.
+            PathSense continuously analyzes motion and confirms high-risk
+            events.
           </ThemedText>
           <StatusBadge state={event.state} />
         </View>
@@ -435,32 +436,32 @@ export default function MonitoringScreen() {
         <Card variant="glass" padding="lg" style={styles.metricsCard}>
           <ThemedText type="label">Motion Telemetry</ThemedText>
           <View style={styles.metricsGrid}>
-            <View style={[styles.metricCell, { borderColor }]}> 
+            <View style={[styles.metricCell, { borderColor }]}>
               <ThemedText type="caption">Motion</ThemedText>
               <ThemedText type="subtitle">
                 {sample ? sample.motionScore.toFixed(2) : "--"}
               </ThemedText>
             </View>
-            <View style={[styles.metricCell, { borderColor }]}> 
+            <View style={[styles.metricCell, { borderColor }]}>
               <ThemedText type="caption">Accel</ThemedText>
               <ThemedText type="subtitle">
                 {sample ? `${sample.accelMagnitude.toFixed(2)} m/s²` : "--"}
               </ThemedText>
             </View>
-            <View style={[styles.metricCell, { borderColor }]}> 
+            <View style={[styles.metricCell, { borderColor }]}>
               <ThemedText type="caption">Gyro</ThemedText>
               <ThemedText type="subtitle">
                 {sample ? `${sample.gyroMagnitude.toFixed(2)} rad/s` : "--"}
               </ThemedText>
             </View>
-            <View style={[styles.metricCell, { borderColor }]}> 
+            <View style={[styles.metricCell, { borderColor }]}>
               <ThemedText type="caption">State</ThemedText>
               <ThemedText type="subtitle">
                 {sample ? sample.motionState : "waiting"}
               </ThemedText>
             </View>
           </View>
-          <ThemedText style={[styles.apiBaseStatus, { color: textSecondary }]}> 
+          <ThemedText style={[styles.apiBaseStatus, { color: textSecondary }]}>
             API Base: {apiBaseUrl}
           </ThemedText>
         </Card>
@@ -470,13 +471,14 @@ export default function MonitoringScreen() {
             <ThemedText type="label">Buffer Readiness</ThemedText>
             <ThemedText type="defaultSemiBold">{bufferFill}%</ThemedText>
           </View>
-          <View style={[styles.progressTrack, { backgroundColor: cardAlt }]}> 
+          <View style={[styles.progressTrack, { backgroundColor: cardAlt }]}>
             <View
               style={[
                 styles.progressFill,
                 {
                   width: `${bufferFill}%`,
-                  backgroundColor: bufferFill >= 100 ? successColor : primaryColor,
+                  backgroundColor:
+                    bufferFill >= 100 ? successColor : primaryColor,
                 },
               ]}
             />

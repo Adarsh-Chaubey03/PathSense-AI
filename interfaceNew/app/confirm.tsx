@@ -196,7 +196,9 @@ export default function ConfirmScreen() {
             </View>
             <View style={styles.mlRow}>
               <ThemedText type="caption">Samples analyzed</ThemedText>
-              <ThemedText type="defaultSemiBold">{mlData.sampleCount}</ThemedText>
+              <ThemedText type="defaultSemiBold">
+                {mlData.sampleCount}
+              </ThemedText>
             </View>
           </Card>
         )}
@@ -214,7 +216,9 @@ export default function ConfirmScreen() {
             onPress={() => void handleImOk()}
           />
           <Button
-            title={isEscalating ? "Triggering SOS..." : "NO - Send Emergency SOS"}
+            title={
+              isEscalating ? "Triggering SOS..." : "NO - Send Emergency SOS"
+            }
             variant="danger"
             size="lg"
             fullWidth
@@ -232,11 +236,15 @@ export default function ConfirmScreen() {
               { color: secondsLeft <= 10 ? dangerColor : warningColor },
             ]}
           >
-            If no response in {secondsLeft}s, emergency contacts will be notified.
+            If no response in {secondsLeft}s, emergency contacts will be
+            notified.
           </ThemedText>
         </Card>
 
-        <ThemedText type="caption" style={[styles.helperText, { color: successColor }]}>
+        <ThemedText
+          type="caption"
+          style={[styles.helperText, { color: successColor }]}
+        >
           Tap “YES - I’m OK” to immediately cancel escalation.
         </ThemedText>
       </ScrollView>
