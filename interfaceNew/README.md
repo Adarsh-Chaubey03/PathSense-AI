@@ -1,8 +1,6 @@
-
-npm run android 
+npm run android
 
 for android start
-
 
 ## PathSense interfaceNew
 
@@ -99,11 +97,11 @@ Sensor Data → Edge Filter → Window Analysis → Physics Check → Decision
 
 #### Fall Detection Constraints
 
-| Condition | Threshold | Description |
-|-----------|-----------|-------------|
-| **Free Fall** | `min_acc < 0.5g` | Minimum acceleration in window must drop below 0.5g (indicating free fall phase) |
-| **Impact** | `max_acc > 2.5g` | Maximum acceleration must spike above 2.5g (indicating ground impact) |
-| **Rotation** | `max_gyro > 2.5 rad/s` | Maximum gyroscope magnitude must exceed 2.5 rad/s (indicating body rotation) |
+| Condition     | Threshold              | Description                                                                      |
+| ------------- | ---------------------- | -------------------------------------------------------------------------------- |
+| **Free Fall** | `min_acc < 0.5g`       | Minimum acceleration in window must drop below 0.5g (indicating free fall phase) |
+| **Impact**    | `max_acc > 2.5g`       | Maximum acceleration must spike above 2.5g (indicating ground impact)            |
+| **Rotation**  | `max_gyro > 2.5 rad/s` | Maximum gyroscope magnitude must exceed 2.5 rad/s (indicating body rotation)     |
 
 **All three conditions must be satisfied simultaneously** within the sliding window to trigger a fall detection.
 
@@ -120,12 +118,12 @@ When a fall is detected, the system captures a **2-second window of raw sensor d
 
 ```typescript
 interface RawSensorDataPoint {
-  acc_x: number;   // Accelerometer X (m/s²)
-  acc_y: number;   // Accelerometer Y (m/s²)
-  acc_z: number;   // Accelerometer Z (m/s²)
-  gyro_x: number;  // Gyroscope X (rad/s)
-  gyro_y: number;  // Gyroscope Y (rad/s)
-  gyro_z: number;  // Gyroscope Z (rad/s)
+  acc_x: number; // Accelerometer X (m/s²)
+  acc_y: number; // Accelerometer Y (m/s²)
+  acc_z: number; // Accelerometer Z (m/s²)
+  gyro_x: number; // Gyroscope X (rad/s)
+  gyro_y: number; // Gyroscope Y (rad/s)
+  gyro_z: number; // Gyroscope Z (rad/s)
   timestamp: number;
 }
 ```
@@ -220,6 +218,7 @@ Key files:
 - ✅ Backend receives `sensorWindow.samples[]` for ML model input
 
 Key files:
+
 - `src/services/sensors/sensor-window-store.ts` - In-memory sensor cache
 - `src/services/api/fall-events.ts` - API payload with sensorWindow field
 
@@ -249,6 +248,14 @@ npm install
 npx expo start
 npm run lint
 ```
+
+### Hotspot/Wi-Fi backend connectivity (phone -> laptop)
+
+- Set `EXPO_PUBLIC_API_BASE_URL` in `.env` to your laptop LAN IP (example: `http://10.87.36.38:4000/api`).
+- Start Expo from `interfaceNew` so env variables are loaded.
+- If you changed `.env`, restart Metro with cache clear: `npx expo start -c`.
+- Android cleartext HTTP is enabled in `app.json` (`android.usesCleartextTraffic=true`) for local LAN testing.
+- If using a dev build/APK, rebuild/reinstall after native config changes (`npx expo run:android`).
 
 ### Backend
 

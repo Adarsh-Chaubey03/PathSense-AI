@@ -76,6 +76,10 @@ export default function MonitoringScreen() {
   // Prevent concurrent API calls
   const isProcessingRef = useRef(false);
   const inTriggerRangeRef = useRef(false);
+  const pendingPotentialFallRef = useRef<{
+    reason: string;
+    triggerSample: SensorSample;
+  } | null>(null);
 
   const appendMonitoringLog = useCallback((message: string): void => {
     const stamp = new Date().toLocaleTimeString();
@@ -180,13 +184,16 @@ export default function MonitoringScreen() {
         const targetWindowSize = sensorWindowStore.getTargetWindowSize();
 
         if (!windowPayload || sampleCount !== targetWindowSize) {
+          pendingPotentialFallRef.current = {
+            reason,vs
+            triggerSample,
+          };
           setApiStatus(
-            `Insufficient 2s window: buffered=${bufferedSamples}, normalized=${sampleCount}, need=${targetWindowSize}`,
+            `Potential fall detected. Waiting for full 2s sensor window before backend call (buffered=${bufferedSamples}, normalized=${sampleCount}/${targetWindowSize})`,
           );
           appendMonitoringLog(
-            `ML API not called: 2s pre-fall window not ready (buffered=${bufferedSamples}, normalized=${sampleCount}/${targetWindowSize})`,
+            `Potential fall still pending; waiting for complete 2s window before /fall-detect (buffered=${bufferedSamples}, normalized=${sampleCount}/${targetWindowSize})`,
           );
-          isProcessingRef.current = false;
           return;
         }
 
@@ -298,6 +305,32 @@ export default function MonitoringScreen() {
     [appendMonitoringLog, storeMLResultAndNavigate],
   );
 
+  const tryReleasePendingPotentialFall = useCallback((): void => {
+    if (isProcessingRef.current || !pendingPotentialFallRef.current) {
+      return;
+    }
+
+    const windowPayload = sensorWindowStore.getWindowForApiCall();
+    const normalizedCount = sensorWindowStore.getWindowForML().length;
+    const targetWindowSize = sensorWindowStore.getTargetWindowSize();
+    const bufferedSamples = sensorWindowStore.getSampleCount();
+
+    if (!windowPayload || normalizedCount !== targetWindowSize) {
+      setApiStatus(
+        `Potential fall detected. Waiting for full 2s sensor window before backend call (buffered=${bufferedSamples}, normalized=${normalizedCount}/${targetWindowSize})`,
+      );
+      return;
+    }
+
+    const latched = pendingPotentialFallRef.current;
+    pendingPotentialFallRef.current = null;
+
+    appendMonitoringLog(
+      `Deferred backend call released: full 2s window ready (normalized=${normalizedCount}/${targetWindowSize})`,
+    );
+    void processMLDetection(latched.reason, latched.triggerSample);
+  }, [appendMonitoringLog, processMLDetection]);
+
   const handleSensorSample = useCallback(
     (newSample: SensorSample) => {
       setSample(newSample);
@@ -305,7 +338,14 @@ export default function MonitoringScreen() {
       // Update buffer fill indicator
       setBufferFill(sensorWindowStore.getBufferFillPercent());
 
-      // Process sample through edge AI filter
+      // If a potential fall is already latched, keep waiting for a full window
+      // and call backend exactly once when ready.
+      if (pendingPotentialFallRef.current) {
+        tryReleasePendingPotentialFall();
+        return;
+      }
+
+      // Process sample through edge AI filter only when no pending trigger exists
       const decision = evaluateWithEdgeFilter(newSample);
       setEdgeStatus(decision);
 
@@ -321,18 +361,17 @@ export default function MonitoringScreen() {
       }
       inTriggerRangeRef.current = enteredTriggerRange;
 
-      // Edge-filter responsibility: when spike detected, extract buffer and call ML API
+      // Latch potential fall once, then defer API call until full buffer is ready
       if (decision.shouldEscalateCandidate) {
-        appendMonitoringLog(
-          `Edge filter CALL_API triggered: ${decision.reason}`,
-        );
-        void processMLDetection(
-          "Edge filter detected a potential fall",
-          newSample,
-        );
+        pendingPotentialFallRef.current = {
+          reason: "Edge filter detected a potential fall",
+          triggerSample: newSample,
+        };
+        appendMonitoringLog(`Potential fall latched: ${decision.reason}`);
+        tryReleasePendingPotentialFall();
       }
     },
-    [appendMonitoringLog, processMLDetection],
+    [appendMonitoringLog, tryReleasePendingPotentialFall],
   );
 
   useEffect(() => {
@@ -340,6 +379,7 @@ export default function MonitoringScreen() {
     resetEdgeFilter();
     sensorWindowStore.clear();
     inTriggerRangeRef.current = false;
+    pendingPotentialFallRef.current = null;
     setMonitoringLogs([]);
     appendMonitoringLog(`API base resolved to ${apiBaseUrl}`);
 

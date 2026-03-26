@@ -3,6 +3,16 @@ import Constants from "expo-constants";
 
 const DEFAULT_PORT = "4000";
 const REQUEST_TIMEOUT_MS = 15000;
+const HARDCODED_API_BASE_URL = "http://10.87.36.38:4000/api";
+
+function normalizeApiBaseUrl(rawBaseUrl: string): string {
+  const trimmed = rawBaseUrl.trim().replace(/\/+$/, "");
+  if (trimmed.toLowerCase().endsWith("/api")) {
+    return trimmed;
+  }
+
+  return `${trimmed}/api`;
+}
 
 function extractHostFromUrl(rawUrl: string): string | null {
   try {
@@ -36,9 +46,10 @@ function getExpoDevHost(): string | null {
 }
 
 function resolveBaseUrl(): string {
-  const configured = process.env.EXPO_PUBLIC_API_BASE_URL;
+  const configured =
+    process.env.EXPO_PUBLIC_API_BASE_URL || HARDCODED_API_BASE_URL;
   if (configured && configured.trim().length > 0) {
-    return configured.replace(/\/+$/, "");
+    return normalizeApiBaseUrl(configured);
   }
 
   const configuredHost = process.env.EXPO_PUBLIC_API_HOST;
@@ -60,6 +71,10 @@ function resolveBaseUrl(): string {
   return `http://${host}:${DEFAULT_PORT}/api`;
 }
 
+const RESOLVED_API_BASE_URL = resolveBaseUrl();
+
+console.log(`[API] Base URL resolved to ${RESOLVED_API_BASE_URL}`);
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -74,7 +89,7 @@ export async function apiRequest<TResponse>(
   path: string,
   options: RequestInit = {},
 ): Promise<TResponse> {
-  const baseUrl = resolveBaseUrl();
+  const baseUrl = RESOLVED_API_BASE_URL;
   const timeoutController = new AbortController();
   const timeoutHandle = setTimeout(() => {
     timeoutController.abort();
@@ -127,5 +142,5 @@ export async function apiRequest<TResponse>(
 }
 
 export function getApiBaseUrl(): string {
-  return resolveBaseUrl();
+  return RESOLVED_API_BASE_URL;
 }
